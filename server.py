@@ -173,6 +173,32 @@ def list_available_nodes(filter_text: str = "", search_scope: str = "default", d
         return f"Error listing nodes: {str(e)}"
 
 
+@mcp.tool()
+def analyze_workspace() -> str:
+    """
+    Get the current state of all nodes in the Dynamo workspace, including errors and warnings.
+    
+    Returns:
+        JSON string containing node names and their execution states.
+    """
+    url = "http://127.0.0.1:5050/mcp/"
+    payload = json.dumps({"action": "get_graph_status"})
+    
+    try:
+        req = urllib.request.Request(
+            url, 
+            data=payload.encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req) as response:
+            return response.read().decode('utf-8')
+            
+    except Exception as e:
+        return f"Error analyzing workspace: {str(e)}. Make sure the latest Dynamo Extension is deployed."
+
+
 
 # ==========================================
 # 新增工具: 腳本庫管理 (Script Library)

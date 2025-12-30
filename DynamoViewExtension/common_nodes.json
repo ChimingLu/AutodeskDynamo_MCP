@@ -1,7 +1,7 @@
 [
     {
         "name": "Point.ByCoordinates",
-        "fullName": "Autodesk.DesignScript.Geometry.Point.ByCoordinates",
+        "fullName": "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double",
         "description": "Creates a Point given 3 Cartesian coordinates",
         "inputs": [
             "x",

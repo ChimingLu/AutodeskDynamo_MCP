@@ -49,6 +49,11 @@ namespace DynamoMCPListener
                     string detail = root["detail"]?.ToString() ?? "basic";
                     return ListNodes(root["filter"]?.ToString(), root["scope"]?.ToString(), detail);
                 }
+
+                if (action == "get_graph_status")
+                {
+                    return GetGraphStatus();
+                }
                 
                 // 1. Create Nodes
                 var nodes = root["nodes"] as JArray;
@@ -77,6 +82,48 @@ namespace DynamoMCPListener
                 MCPLogger.Error($"HandleCommand failed: {ex.Message}", ex);
                 return CreateErrorResponse(ex.Message, ex.StackTrace);
             }
+        }
+
+        private string GetGraphStatus()
+        {
+            var result = new JObject();
+            var nodeList = new JArray();
+
+            try
+            {
+                var workspace = _vm.Model.CurrentWorkspace;
+                foreach (var node in workspace.Nodes)
+                {
+                    var nodeObj = new JObject();
+                    nodeObj["id"] = node.GUID.ToString();
+                    nodeObj["name"] = node.Name;
+                    nodeObj["state"] = node.State.ToString();
+                    
+                    // Get warning/error messages if any
+                    // Note: Dynamo nodes have a 'ToolTipText' or validation properties
+                    // In recent Dynamo versions, node.ErrorHighlight is used or specific properties.
+                    // A simple way is to check the node's state and potentially its warnings.
+                    
+                    var messages = new JArray();
+                    // Some common ways to get errors in Dynamo API:
+                    // node.ToolTipText often contains the error message shown in the UI
+                    // Or node.ValidationData (if available in this version)
+                    
+                    // We'll collect the Name and State for now, as getting the exact string 
+                    // can vary by Dynamo version/internal implementation.
+                    
+                    nodeList.Add(nodeObj);
+                }
+
+                result["nodes"] = nodeList;
+                result["status"] = "ok";
+            }
+            catch (Exception ex)
+            {
+                return CreateErrorResponse("Failed to get graph status: " + ex.Message);
+            }
+
+            return result.ToString();
         }
 
         private string CreateErrorResponse(string message, string details = null)
@@ -291,32 +338,42 @@ namespace DynamoMCPListener
 
             // Execute Command to Create Node
             // Note: nodeName must be the internal creation name or standard name
-            // For simple numbers, use "Core.Input.Basic.DoubleInput" or logic
             
-            if (nodeName == "Number")
+            // Resolve common names using the cache (e.g., "Point.ByCoordinates" -> "Autodesk.DesignScript.Geometry.Point.ByCoordinates")
+            if (_commonNodesCache == null) LoadCommonNodesCache();
+            var commonMatch = _commonNodesCache?.FirstOrDefault(cn => cn["name"]?.ToString() == nodeName);
+            if (commonMatch != null)
             {
-                 // Fallback: Try creating "Inside Code Block" or just use "Input.Number" wrapper? 
-                 // Actually, "Code Block" is safer for inputs.
-                 // Command: CreateNodeCommand(guid, "Code Block", x, y, ...)
-                 // Then UpdateModelValueCommand(guid, "Code", value)
-                 
+                string fullName = commonMatch["fullName"]?.ToString();
+                if (!string.IsNullOrEmpty(fullName))
+                {
+                    MCPLogger.Info($"Resolved common node name '{nodeName}' to '{fullName}'");
+                    nodeName = fullName;
+                }
+            }
+
+            if (nodeName == "Number" || nodeName == "Core.Input.Basic.DoubleInput")
+            {
                  var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
                  _vm.Model.ExecuteCommand(cmd);
                  
                  if (n["value"] != null)
                  {
                      string val = n["value"].ToString();
-                     // For code block, the property is "Code"
+                     if (!val.EndsWith(";")) val += ";";
                      var updateCmd = new DynamoModel.UpdateModelValueCommand(new List<Guid> { dynamoGuid }, "Code", val);
                      _vm.Model.ExecuteCommand(updateCmd);
                  }
             }
             else
             {
-                // Generic creation (ZeroTouch, NodeModel, DSFunction)
-                // We rely on Dynamo's name resolution
-                var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, nodeName, x, y, false, false);
-                _vm.Model.ExecuteCommand(cmd);
+                try {
+                    var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, nodeName, x, y, false, false);
+                    _vm.Model.ExecuteCommand(cmd);
+                } catch (Exception ex) {
+                    MCPLogger.Error($"Failed to create node '{nodeName}': {ex.Message}");
+                    throw; // Rethrow to be caught by HandleCommand
+                }
             }
         }
 
