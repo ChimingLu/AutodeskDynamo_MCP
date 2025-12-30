@@ -1,0 +1,173 @@
+[
+    {
+        "name": "Point.ByCoordinates",
+        "fullName": "Autodesk.DesignScript.Geometry.Point.ByCoordinates",
+        "description": "Creates a Point given 3 Cartesian coordinates",
+        "inputs": [
+            "x",
+            "y",
+            "z"
+        ],
+        "outputs": [
+            "Point"
+        ]
+    },
+    {
+        "name": "Line.ByStartPointEndPoint",
+        "fullName": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint",
+        "description": "Creates a straight Line between two input Points",
+        "inputs": [
+            "startPoint",
+            "endPoint"
+        ],
+        "outputs": [
+            "Line"
+        ]
+    },
+    {
+        "name": "Circle.ByCenterPointRadius",
+        "fullName": "Autodesk.DesignScript.Geometry.Circle.ByCenterPointRadius",
+        "description": "Creates a Circle with a center point and radius",
+        "inputs": [
+            "centerPoint",
+            "radius"
+        ],
+        "outputs": [
+            "Circle"
+        ]
+    },
+    {
+        "name": "Rectangle.ByWidthLength",
+        "fullName": "Autodesk.DesignScript.Geometry.Rectangle.ByWidthLength",
+        "description": "Creates a Rectangle centered at the origin (or input Plane) with width and length",
+        "inputs": [
+            "plane",
+            "width",
+            "length"
+        ],
+        "outputs": [
+            "Rectangle"
+        ]
+    },
+    {
+        "name": "Vector.ByCoordinates",
+        "fullName": "Autodesk.DesignScript.Geometry.Vector.ByCoordinates",
+        "description": "Creates a Vector from 3 coordinates",
+        "inputs": [
+            "x",
+            "y",
+            "z"
+        ],
+        "outputs": [
+            "Vector"
+        ]
+    },
+    {
+        "name": "Number",
+        "fullName": "Core.Input.Basic.DoubleInput",
+        "description": "Creates a number",
+        "inputs": [],
+        "outputs": [
+            "double"
+        ]
+    },
+    {
+        "name": "Integer Slider",
+        "fullName": "Core.Input.Basic.IntegerSlider",
+        "description": "Creates an integer slider",
+        "inputs": [],
+        "outputs": [
+            "int"
+        ]
+    },
+    {
+        "name": "String",
+        "fullName": "Core.Input.Basic.StringInput",
+        "description": "Creates a string",
+        "inputs": [],
+        "outputs": [
+            "string"
+        ]
+    },
+    {
+        "name": "Boolean",
+        "fullName": "Core.Input.Basic.Boolean",
+        "description": "Selection between True and False",
+        "inputs": [],
+        "outputs": [
+            "bool"
+        ]
+    },
+    {
+        "name": "List.Create",
+        "fullName": "Core.List.Create",
+        "description": "Makes a new list out of the given inputs",
+        "inputs": [
+            "item0"
+        ],
+        "outputs": [
+            "list"
+        ]
+    },
+    {
+        "name": "Math.RemapRange",
+        "fullName": "DSCore.Math.RemapRange",
+        "description": "Remaps a list of numbers from one range to another",
+        "inputs": [
+            "numbers",
+            "newMin",
+            "newMax"
+        ],
+        "outputs": [
+            "list"
+        ]
+    },
+    {
+        "name": "Wall.ByCurveAndHeight",
+        "fullName": "Revit.Elements.Wall.ByCurveAndHeight",
+        "description": "Creates a Wall from a guiding Curve, Height, Level, and WallType",
+        "inputs": [
+            "curve",
+            "height",
+            "level",
+            "wallType"
+        ],
+        "outputs": [
+            "Wall"
+        ]
+    },
+    {
+        "name": "Element.GetParameterValueByName",
+        "fullName": "Revit.Elements.Element.GetParameterValueByName",
+        "description": "Gets the value of a parameter from an element",
+        "inputs": [
+            "element",
+            "parameterName"
+        ],
+        "outputs": [
+            "var"
+        ]
+    },
+    {
+        "name": "Element.SetParameterByName",
+        "fullName": "Revit.Elements.Element.SetParameterByName",
+        "description": "Sets a parameter value for an element",
+        "inputs": [
+            "element",
+            "parameterName",
+            "value"
+        ],
+        "outputs": [
+            "element"
+        ]
+    },
+    {
+        "name": "Select Model Element",
+        "fullName": "Dynamo.Nodes.DSModelElementSelection",
+        "description": "Selects a model element from the Revit document",
+        "inputs": [],
+        "outputs": [
+            "Element"
+        ]
+    }
+]

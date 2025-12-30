@@ -1,0 +1,37 @@
+{
+    "description": "從起點 (0,0,0) 畫一條線到任意方向的終點 (10,0,0)。",
+    "content": {
+        "nodes": [
+            {
+                "id": "p_start",
+                "name": "Point.ByCoordinates",
+                "x": 0,
+                "y": 0
+            },
+            {
+                "id": "p_end",
+                "name": "Point.ByCoordinates",
+                "x": 10,
+                "y": 0
+            },
+            {
+                "id": "line",
+                "name": "Line.ByStartPointEndPoint"
+            }
+        ],
+        "connectors": [
+            {
+                "from": "p_start",
+                "to": "line",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "p_end",
+                "to": "line",
+                "fromPort": 0,
+                "toPort": 1
+            }
+        ]
+    }
+}

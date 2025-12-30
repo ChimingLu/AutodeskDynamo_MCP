@@ -1,0 +1,365 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Dynamo.Graph.Nodes;
+using Dynamo.Models;
+using Dynamo.ViewModels;
+using Dynamo.Wpf.Extensions;
+using Newtonsoft.Json.Linq;
+using Autodesk.DesignScript.Runtime;
+
+namespace DynamoMCPListener
+{
+    [IsVisibleInDynamoLibrary(false)]
+    public class GraphHandler
+    {
+        private DynamoViewModel _vm;
+        
+        // Map user-provided IDs (e.g., "node1") to actual Dynamo GUIDs
+        private Dictionary<string, Guid> _nodeIdMap = new Dictionary<string, Guid>();
+
+        public GraphHandler(ViewLoadedParams p)
+        {
+            if (p.DynamoWindow.DataContext is DynamoViewModel vm)
+            {
+                _vm = vm;
+            }
+        }
+
+        public GraphHandler(DynamoViewModel vm)
+        {
+            _vm = vm;
+        }
+
+        public string HandleCommand(string json)
+        {
+            if (_vm == null) 
+            {
+                MCPLogger.Error("ViewModel is null");
+                return CreateErrorResponse("ViewModel is null");
+            }
+            
+            try 
+            {
+                JObject root = JObject.Parse(json);
+                string action = root["action"]?.ToString();
+
+                if (action == "list_nodes")
+                {
+                    string detail = root["detail"]?.ToString() ?? "basic";
+                    return ListNodes(root["filter"]?.ToString(), root["scope"]?.ToString(), detail);
+                }
+                
+                // 1. Create Nodes
+                var nodes = root["nodes"] as JArray;
+                if (nodes != null)
+                {
+                    foreach (var n in nodes)
+                    {
+                        CreateNode(n);
+                    }
+                }
+
+                // 2. Create Connections
+                var conns = root["connectors"] as JArray;
+                if (conns != null)
+                {
+                    foreach (var c in conns)
+                    {
+                        CreateConnection(c);
+                    }
+                }
+
+                return "{\"status\": \"ok\"}";
+            }
+            catch (Exception ex)
+            {
+                MCPLogger.Error($"HandleCommand failed: {ex.Message}", ex);
+                return CreateErrorResponse(ex.Message, ex.StackTrace);
+            }
+        }
+
+        private string CreateErrorResponse(string message, string details = null)
+        {
+            var error = new JObject();
+            error["error"] = message;
+            if (!string.IsNullOrEmpty(details))
+            {
+                error["details"] = details;
+            }
+            return error.ToString();
+        }
+
+        private static List<JObject> _commonNodesCache = null;
+        private static Dictionary<string, string> _searchCache = new Dictionary<string, string>();
+        private static DateTime _cacheTime = DateTime.MinValue;
+
+        private string ListNodes(string filter, string scope, string detail = "basic")
+        {
+            var result = new JObject();
+            var nodeList = new JArray();
+
+            // 1. Load Common Nodes (with caching)
+            if (_commonNodesCache == null)
+            {
+                LoadCommonNodesCache();
+            }
+
+            // Normalization
+            filter = filter?.Trim().ToLowerInvariant() ?? "";
+            bool isSearchAll = (scope == "all");
+            int maxResults = isSearchAll ? MCPConfig.ALL_SCOPE_MAX_RESULTS : MCPConfig.DEFAULT_MAX_RESULTS;
+
+            // Check cache (valid for 5 minutes)
+            string cacheKey = $"{filter}|{scope}|{detail}";
+            if ((DateTime.Now - _cacheTime).TotalMinutes < MCPConfig.CACHE_EXPIRY_MINUTES 
+                && _searchCache.ContainsKey(cacheKey))
+            {
+                MCPLogger.Debug($"Cache hit for: {cacheKey}");
+                return _searchCache[cacheKey];
+            }
+
+            // 2. Search Logic
+            // Step 2a: Find matches in Common Nodes (Priority)
+            var commonMatches = new List<JObject>();
+            if (_commonNodesCache != null)
+            {
+                foreach (var node in _commonNodesCache)
+                {
+                    string name = node["name"]?.ToString().ToLowerInvariant() ?? "";
+                    string desc = node["description"]?.ToString().ToLowerInvariant() ?? "";
+                    
+                    if (string.IsNullOrEmpty(filter) || name.Contains(filter) || desc.Contains(filter))
+                    {
+                        var nodeObj = CreateNodeObject(node, detail, true);
+                        commonMatches.Add(nodeObj);
+                    }
+                }
+            }
+
+            // Step 2b: Search Global Nodes
+            var globalMatches = new List<JObject>();
+            var searchModel = _vm.Model.SearchModel;
+            var entries = searchModel.Entries;
+            
+            foreach (var entry in entries)
+            {
+                if (commonMatches.Count + globalMatches.Count >= maxResults) break;
+
+                // Check duplication with common nodes (by FullName)
+                string fullName = entry.FullName;
+                bool alreadyAdded = commonMatches.Any(n => n["fullName"]?.ToString() == fullName);
+                if (alreadyAdded) continue;
+
+                string name = entry.CreationName.ToLowerInvariant();
+                
+                // Strict Filter for Default Scope
+                if (!string.IsNullOrEmpty(filter))
+                {
+                    if (!name.Contains(filter)) continue;
+                }
+                else
+                {
+                    // If no filter and default scope, don't spam global nodes.
+                    if (!isSearchAll) continue;
+                }
+
+                // Add Global Node
+                var nodeObj = new JObject();
+                nodeObj["name"] = entry.CreationName;
+                nodeObj["fullName"] = entry.FullName;
+                nodeObj["isCommon"] = false;
+                
+                // Detail level control
+                if (detail == "standard" || detail == "full")
+                {
+                    nodeObj["category"] = entry.Categories.FirstOrDefault();
+                }
+                
+                if (detail == "full")
+                {
+                    nodeObj["description"] = entry.Description;
+                }
+                
+                globalMatches.Add(nodeObj);
+            }
+
+            // 3. Combine results: Common nodes first, then global nodes
+            foreach (var node in commonMatches)
+            {
+                nodeList.Add(node);
+            }
+            foreach (var node in globalMatches)
+            {
+                nodeList.Add(node);
+            }
+
+            result["nodes"] = nodeList;
+            result["count"] = nodeList.Count;
+            result["commonCount"] = commonMatches.Count;
+            result["globalCount"] = globalMatches.Count;
+            
+            if (nodeList.Count >= maxResults)
+            {
+                result["warning"] = "Result truncated. Please refine search or use 'all' scope.";
+            }
+
+            string jsonResult = result.ToString();
+            
+            // Update cache
+            _searchCache[cacheKey] = jsonResult;
+            _cacheTime = DateTime.Now;
+
+            MCPLogger.Info($"ListNodes: filter='{filter}', scope={scope}, detail={detail}, results={nodeList.Count} (common={commonMatches.Count}, global={globalMatches.Count})");
+            
+            return jsonResult;
+        }
+
+        private void LoadCommonNodesCache()
+        {
+            _commonNodesCache = new List<JObject>();
+            
+            // Try multiple possible paths
+            string assemblyDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string[] possiblePaths = new[] {
+                System.IO.Path.Combine(assemblyDir, MCPConfig.COMMON_NODES_FILE),
+                System.IO.Path.Combine(assemblyDir, "..", MCPConfig.COMMON_NODES_FILE),
+                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
+                                       "Dynamo", "MCP", MCPConfig.COMMON_NODES_FILE)
+            };
+            
+            foreach (var path in possiblePaths)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    try 
+                    {
+                        var jsonContent = System.IO.File.ReadAllText(path);
+                        var commonArr = JArray.Parse(jsonContent);
+                        foreach (var item in commonArr)
+                        {
+                            if (item is JObject obj) _commonNodesCache.Add(obj);
+                        }
+                        MCPLogger.Info($"Loaded {_commonNodesCache.Count} common nodes from: {path}");
+                        return;
+                    } 
+                    catch (Exception ex) 
+                    {
+                        MCPLogger.Warning($"Failed to load common nodes from {path}: {ex.Message}");
+                    }
+                }
+            }
+            
+            MCPLogger.Warning($"Common nodes file not found in any of the expected locations.");
+        }
+
+        private JObject CreateNodeObject(JObject sourceNode, string detail, bool isCommon)
+        {
+            var nodeObj = new JObject();
+            nodeObj["name"] = sourceNode["name"];
+            nodeObj["fullName"] = sourceNode["fullName"];
+            nodeObj["isCommon"] = isCommon;
+            
+            if (detail == "standard" || detail == "full")
+            {
+                nodeObj["inputs"] = sourceNode["inputs"];
+                nodeObj["outputs"] = sourceNode["outputs"];
+            }
+            
+            if (detail == "full")
+            {
+                nodeObj["description"] = sourceNode["description"];
+            }
+            
+            return nodeObj;
+        }
+
+        private void CreateNode(JToken n)
+        {
+            string tempId = n["id"]?.ToString();
+            string nodeName = n["name"]?.ToString(); // e.g., "Point.ByCoordinates"
+            double x = n["x"]?.ToObject<double>() ?? 0;
+            double y = n["y"]?.ToObject<double>() ?? 0;
+            
+            // Generate a real GUID for Dynamo
+            Guid dynamoGuid = Guid.NewGuid();
+            
+            if (!string.IsNullOrEmpty(tempId))
+            {
+                _nodeIdMap[tempId] = dynamoGuid;
+            }
+
+            // Execute Command to Create Node
+            // Note: nodeName must be the internal creation name or standard name
+            // For simple numbers, use "Core.Input.Basic.DoubleInput" or logic
+            
+            if (nodeName == "Number")
+            {
+                 // Fallback: Try creating "Inside Code Block" or just use "Input.Number" wrapper? 
+                 // Actually, "Code Block" is safer for inputs.
+                 // Command: CreateNodeCommand(guid, "Code Block", x, y, ...)
+                 // Then UpdateModelValueCommand(guid, "Code", value)
+                 
+                 var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
+                 _vm.Model.ExecuteCommand(cmd);
+                 
+                 if (n["value"] != null)
+                 {
+                     string val = n["value"].ToString();
+                     // For code block, the property is "Code"
+                     var updateCmd = new DynamoModel.UpdateModelValueCommand(new List<Guid> { dynamoGuid }, "Code", val);
+                     _vm.Model.ExecuteCommand(updateCmd);
+                 }
+            }
+            else
+            {
+                // Generic creation (ZeroTouch, NodeModel, DSFunction)
+                // We rely on Dynamo's name resolution
+                var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, nodeName, x, y, false, false);
+                _vm.Model.ExecuteCommand(cmd);
+            }
+        }
+
+        private void CreateConnection(JToken c)
+        {
+            string fromId = c["from"]?.ToString();
+            string toId = c["to"]?.ToString();
+            int fromPort = c["fromPort"]?.ToObject<int>() ?? 0;
+            int toPort = c["toPort"]?.ToObject<int>() ?? 0;
+
+            if (_nodeIdMap.ContainsKey(fromId) && _nodeIdMap.ContainsKey(toId))
+            {
+                Guid startNodeId = _nodeIdMap[fromId];
+                Guid endNodeId = _nodeIdMap[toId];
+
+                // Create the connection using the standard Begin/End MakeConnectionCommand pattern
+                try 
+                {
+                    // 1. Begin connection at the source (Output)
+                    var beginCmd = new DynamoModel.MakeConnectionCommand(
+                        startNodeId, 
+                        fromPort, 
+                        PortType.Output, 
+                        DynamoModel.MakeConnectionCommand.Mode.Begin
+                    );
+                    _vm.Model.ExecuteCommand(beginCmd);
+
+                    // 2. End connection at the destination (Input)
+                    var endCmd = new DynamoModel.MakeConnectionCommand(
+                        endNodeId, 
+                        toPort, 
+                        PortType.Input, 
+                        DynamoModel.MakeConnectionCommand.Mode.End
+                    );
+                    _vm.Model.ExecuteCommand(endCmd);
+                }
+                catch (Exception ex)
+                {
+                    // Log or handle error if connection fails (e.g. incompatible types)
+                    // For now, we just swallow it or log to console/debug in a real scenario
+                    // simple log to a file for debugging if needed, but avoiding UI spam
+                }
+            }
+        }
+    }
+}

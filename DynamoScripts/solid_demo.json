@@ -1,0 +1,109 @@
+{
+    "description": "Demonstrates Solid geometry: Creates a Cuboid and a Sphere, then performs a Solid Difference.",
+    "content": {
+        "nodes": [
+            {
+                "id": "nm_w",
+                "name": "Number",
+                "value": 10,
+                "x": 100,
+                "y": 100
+            },
+            {
+                "id": "nm_l",
+                "name": "Number",
+                "value": 10,
+                "x": 100,
+                "y": 150
+            },
+            {
+                "id": "nm_h",
+                "name": "Number",
+                "value": 10,
+                "x": 100,
+                "y": 200
+            },
+            {
+                "id": "pt_origin",
+                "name": "Point.ByCoordinates",
+                "x": 100,
+                "y": 300
+            },
+            {
+                "id": "cuboid",
+                "name": "Cuboid.ByLengths",
+                "x": 300,
+                "y": 150
+            },
+            {
+                "id": "nm_radius",
+                "name": "Number",
+                "value": 6,
+                "x": 100,
+                "y": 450
+            },
+            {
+                "id": "sphere",
+                "name": "Sphere.ByCenterPointRadius",
+                "x": 300,
+                "y": 400
+            },
+            {
+                "id": "solid_diff",
+                "name": "Solid.Difference",
+                "x": 600,
+                "y": 250
+            }
+        ],
+        "connectors": [
+            {
+                "from": "pt_origin",
+                "to": "cuboid",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "nm_w",
+                "to": "cuboid",
+                "fromPort": 0,
+                "toPort": 1
+            },
+            {
+                "from": "nm_l",
+                "to": "cuboid",
+                "fromPort": 0,
+                "toPort": 2
+            },
+            {
+                "from": "nm_h",
+                "to": "cuboid",
+                "fromPort": 0,
+                "toPort": 3
+            },
+            {
+                "from": "pt_origin",
+                "to": "sphere",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "nm_radius",
+                "to": "sphere",
+                "fromPort": 0,
+                "toPort": 1
+            },
+            {
+                "from": "cuboid",
+                "to": "solid_diff",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "sphere",
+                "to": "solid_diff",
+                "fromPort": 0,
+                "toPort": 1
+            }
+        ]
+    }
+}

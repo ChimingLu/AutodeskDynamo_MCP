@@ -1,0 +1,27 @@
+{
+    "description": "Creates a Line connecting p1_r and p2_r.",
+    "content": {
+        "nodes": [
+            {
+                "id": "line1",
+                "name": "Line.ByStartPointEndPoint",
+                "x": 800,
+                "y": 250
+            }
+        ],
+        "connectors": [
+            {
+                "from": "p1_r",
+                "to": "line1",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "p2_r",
+                "to": "line1",
+                "fromPort": 0,
+                "toPort": 1
+            }
+        ]
+    }
+}

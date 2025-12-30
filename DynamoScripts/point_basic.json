@@ -1,0 +1,99 @@
+{
+    "description": "Places two points with inputs.",
+    "content": {
+        "nodes": [
+            {
+                "id": "nx1_r",
+                "name": "Number",
+                "value": 0,
+                "x": 250,
+                "y": 100
+            },
+            {
+                "id": "ny1_r",
+                "name": "Number",
+                "value": 10,
+                "x": 250,
+                "y": 150
+            },
+            {
+                "id": "nz1_r",
+                "name": "Number",
+                "value": 20,
+                "x": 250,
+                "y": 200
+            },
+            {
+                "id": "p1_r",
+                "name": "Point.ByCoordinates",
+                "x": 500,
+                "y": 150
+            },
+            {
+                "id": "nx2_r",
+                "name": "Number",
+                "value": 30,
+                "x": 250,
+                "y": 350
+            },
+            {
+                "id": "ny2_r",
+                "name": "Number",
+                "value": 40,
+                "x": 250,
+                "y": 400
+            },
+            {
+                "id": "nz2_r",
+                "name": "Number",
+                "value": 50,
+                "x": 250,
+                "y": 450
+            },
+            {
+                "id": "p2_r",
+                "name": "Point.ByCoordinates",
+                "x": 500,
+                "y": 350
+            }
+        ],
+        "connectors": [
+            {
+                "from": "nx1_r",
+                "to": "p1_r",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "ny1_r",
+                "to": "p1_r",
+                "fromPort": 0,
+                "toPort": 1
+            },
+            {
+                "from": "nz1_r",
+                "to": "p1_r",
+                "fromPort": 0,
+                "toPort": 2
+            },
+            {
+                "from": "nx2_r",
+                "to": "p2_r",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "ny2_r",
+                "to": "p2_r",
+                "fromPort": 0,
+                "toPort": 1
+            },
+            {
+                "from": "nz2_r",
+                "to": "p2_r",
+                "fromPort": 0,
+                "toPort": 2
+            }
+        ]
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "MCP Listener",
+  "version": "1.0.0",
+  "description": "Listens for MCP commands from Python Server",
+  "engine_version": "3.3.0.0",
+  "group": "MCP",
+  "keywords": [
+    "mcp",
+    "ai"
+  ],
+  "dependencies": [],
+  "license": "MIT",
+  "node_libraries": [
+    "DynamoMCPListener, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+  ]
+}
