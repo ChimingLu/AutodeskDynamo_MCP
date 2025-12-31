@@ -7,6 +7,8 @@ using Dynamo.ViewModels;
 using Dynamo.Wpf.Extensions;
 using Newtonsoft.Json.Linq;
 using Autodesk.DesignScript.Runtime;
+using Dynamo.Search.SearchElements;
+using Dynamo.Graph.Nodes.CustomNodes;
 
 namespace DynamoMCPListener
 {
@@ -17,6 +19,10 @@ namespace DynamoMCPListener
         
         // Map user-provided IDs (e.g., "node1") to actual Dynamo GUIDs
         private Dictionary<string, Guid> _nodeIdMap = new Dictionary<string, Guid>();
+
+        // 全域節點索引，加速搜尋與放置
+        private static Dictionary<string, NodeSearchElement> _globalNodeIndex = null;
+        private static readonly object _indexLock = new object();
 
         public GraphHandler(ViewLoadedParams p)
         {
@@ -53,6 +59,14 @@ namespace DynamoMCPListener
                 if (action == "get_graph_status")
                 {
                     return GetGraphStatus();
+                }
+
+                if (action == "reload_config")
+                {
+                    _commonNodesCache = null;
+                    LoadCommonNodesCache();
+                    _searchCache.Clear();
+                    return "{\"status\": \"Config reloaded\"}";
                 }
                 
                 // 1. Create Nodes
@@ -141,6 +155,44 @@ namespace DynamoMCPListener
         private static Dictionary<string, string> _searchCache = new Dictionary<string, string>();
         private static DateTime _cacheTime = DateTime.MinValue;
 
+        private void BuildGlobalIndex()
+        {
+            if (_globalNodeIndex != null) return;
+
+            lock (_indexLock)
+            {
+                if (_globalNodeIndex != null) return;
+
+                MCPLogger.Info("Building global node index...");
+                var index = new Dictionary<string, NodeSearchElement>(StringComparer.OrdinalIgnoreCase);
+                
+                try
+                {
+                    var searchModel = _vm.Model.SearchModel;
+                    foreach (var entry in searchModel.Entries)
+                    {
+                        // 優先使用 FullName 作為 key
+                        if (!string.IsNullOrEmpty(entry.FullName) && !index.ContainsKey(entry.FullName))
+                        {
+                            index[entry.FullName] = entry;
+                        }
+
+                        // 同時保留 CreationName 的對照，以便於簡稱搜尋
+                        if (!string.IsNullOrEmpty(entry.CreationName) && !index.ContainsKey(entry.CreationName))
+                        {
+                            index[entry.CreationName] = entry;
+                        }
+                    }
+                    _globalNodeIndex = index;
+                    MCPLogger.Info($"Index built with {_globalNodeIndex.Count} entries.");
+                }
+                catch (Exception ex)
+                {
+                    MCPLogger.Error($"Failed to build global index: {ex.Message}");
+                }
+            }
+        }
+
         private string ListNodes(string filter, string scope, string detail = "basic")
         {
             var result = new JObject();
@@ -199,11 +251,12 @@ namespace DynamoMCPListener
                 if (alreadyAdded) continue;
 
                 string name = entry.CreationName.ToLowerInvariant();
+                string entryFullName = entry.FullName.ToLowerInvariant();
                 
                 // Strict Filter for Default Scope
                 if (!string.IsNullOrEmpty(filter))
                 {
-                    if (!name.Contains(filter)) continue;
+                    if (!name.Contains(filter) && !entryFullName.Contains(filter)) continue;
                 }
                 else
                 {
@@ -221,6 +274,12 @@ namespace DynamoMCPListener
                 if (detail == "standard" || detail == "full")
                 {
                     nodeObj["category"] = entry.Categories.FirstOrDefault();
+
+                    // 效能優化：僅在需要時且針對自定義節點提取埠資訊
+                    if (entry is CustomNodeSearchElement customEntry)
+                    {
+                        ExtractCustomNodePorts(nodeObj, customEntry);
+                    }
                 }
                 
                 if (detail == "full")
@@ -229,6 +288,13 @@ namespace DynamoMCPListener
                 }
                 
                 globalMatches.Add(nodeObj);
+            }
+
+            // 3. Fallback to using Global Index if needed (when no filter or for all scope)
+            if (isSearchAll || !string.IsNullOrEmpty(filter))
+            {
+                BuildGlobalIndex();
+                // 這裡可以再補充從索引中快速過濾的邏輯
             }
 
             // 3. Combine results: Common nodes first, then global nodes
@@ -321,6 +387,52 @@ namespace DynamoMCPListener
             return nodeObj;
         }
 
+        private void ExtractCustomNodePorts(JObject nodeObj, CustomNodeSearchElement customEntry)
+        {
+            try
+            {
+                // 在 Dynamo 3.0 中，透過 LibraryServices 獲取節點描述
+                var descriptors = _vm.Model.LibraryServices.GetAllFunctionDescriptors(customEntry.FullName);
+                var descriptor = descriptors.FirstOrDefault();
+                
+                if (descriptor != null)
+                {
+                    var inputs = new JArray();
+                    foreach (var param in descriptor.Parameters)
+                    {
+                        inputs.Add(param.Name);
+                    }
+                    nodeObj["inputs"] = inputs;
+
+                    var outputs = new JArray();
+                    // 輸出口在 FunctionDescriptor 中通常在 ReturnParameters 或類似屬性
+                    // 這裡先嘗試 Parameters 中標記為輸出的，或者 ReturnType
+                    // 如果是多個輸出，通常會有特定的集合。
+                    // 為了安全，如果只有一個，我們可以用 ReturnKeys
+                    foreach (var key in descriptor.ReturnKeys)
+                    {
+                        outputs.Add(key);
+                    }
+                    
+                    if (outputs.Count == 0)
+                    {
+                        string typeName = descriptor.ReturnType.ToString();
+                        if (!string.IsNullOrEmpty(typeName) && typeName != "void") 
+                        {
+                            outputs.Add(typeName);
+                        }
+                    }
+
+                    nodeObj["outputs"] = outputs;
+                    nodeObj["isCustomNode"] = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                MCPLogger.Debug($"Could not extract metadata for custom node {customEntry.FullName}: {ex.Message}");
+            }
+        }
+
         private void CreateNode(JToken n)
         {
             string tempId = n["id"]?.ToString();
@@ -349,6 +461,25 @@ namespace DynamoMCPListener
                 {
                     MCPLogger.Info($"Resolved common node name '{nodeName}' to '{fullName}'");
                     nodeName = fullName;
+                }
+            }
+            else
+            {
+                // If not in common nodes, try global index
+                BuildGlobalIndex();
+                if (_globalNodeIndex != null && _globalNodeIndex.TryGetValue(nodeName, out var entry))
+                {
+                    if (entry is CustomNodeSearchElement customEntry)
+                    {
+                        // For custom nodes, we MUST use the GUID string for creation
+                        nodeName = customEntry.ID.ToString();
+                        MCPLogger.Info($"Resolved custom node '{entry.FullName}' to GUID '{nodeName}' for creation.");
+                    }
+                    else
+                    {
+                        MCPLogger.Info($"Resolved node name '{nodeName}' via global index to '{entry.FullName}'");
+                        nodeName = entry.FullName;
+                    }
                 }
             }
 
@@ -410,11 +541,9 @@ namespace DynamoMCPListener
                     );
                     _vm.Model.ExecuteCommand(endCmd);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    // Log or handle error if connection fails (e.g. incompatible types)
-                    // For now, we just swallow it or log to console/debug in a real scenario
-                    // simple log to a file for debugging if needed, but avoiding UI spam
+                    // 忽略連線錯誤
                 }
             }
         }

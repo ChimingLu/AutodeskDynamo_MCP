@@ -31,7 +31,9 @@ namespace DynamoMCPListener
         /// <summary>
         /// 日誌檔案路徑
         /// </summary>
-        public const string LOG_FILE_PATH = @"C:\Users\Public\DynamoMCP.log";
+        public static string LOG_FILE_PATH => System.IO.Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), 
+            "Dynamo", "MCP", "DynamoMCP.log");
         
         /// <summary>
         /// Common Nodes 檔案名稱

@@ -110,3 +110,13 @@
 
 ## 授權
 本專案採用 **MIT License**。詳見 [LICENSE](LICENSE) 檔案。
+
+### 5. 常用資訊流控制節點 (Flow Control Nodes)
+
+已特別將以下 Clockwork 與標準 Dynamo 節點加入 common_nodes.json，方便 AI 搜尋與使用：
+
+- **Passthrough** (Clockwork.Core.Sequence.Passthrough): 強制執行順序。在 waitFor 輸入執行完後，才將 passThrough 的資料送出。
+- **Logic.If** (DSCore.Logic.If): 標準邏輯判斷，根據布林值決定輸出。
+- **IfThenElse** (Clockwork.Core.Logic.IfThenElse): Clockwork 版的邏輯判斷。
+- **Gate** (Clockwork.Core.Logic.Gate): 資訊流閘門，可透過布林值開啟或關閉資料傳輸。
+- **List.FilterByBoolMask** (DSCore.List.FilterByBoolMask): 透過布林遮罩過濾清單。

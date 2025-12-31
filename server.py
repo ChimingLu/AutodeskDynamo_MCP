@@ -135,7 +135,7 @@ def execute_dynamo_instructions(instructions: str) -> str:
 @mcp.tool()
 def list_available_nodes(filter_text: str = "", search_scope: str = "default", detail: str = "basic") -> str:
     """
-    List available nodes in the current Dynamo session.
+    List available nodes in the current Dynamo session, including .dyf custom nodes from packages.
     
     Args:
         filter_text: Optional text to filter node names.
@@ -143,8 +143,8 @@ def list_available_nodes(filter_text: str = "", search_scope: str = "default", d
                       "all" searches entire Global Node Library (limit 200). 
                       Use "all" ONLY if the user explicitly asks to "search all nodes" or "global search".
         detail: Level of detail to return:
-                "basic" (default) - Only name and fullName (minimal tokens)
-                "standard" - Adds inputs, outputs, and category
+                "basic" (default) - Only name and fullName (fastest, lowest tokens)
+                "standard" - Adds inputs, outputs, and category (includes .dyf metadata)
                 "full" - Includes description (highest tokens)
         
     Returns:
@@ -207,6 +207,7 @@ import os
 import glob
 
 SCRIPT_DIR = os.path.join(os.path.dirname(__file__), "DynamoScripts")
+# 也可考慮存放在使用者的 AppData 以便持久化，但目前維持在專案夾內
 if not os.path.exists(SCRIPT_DIR):
     os.makedirs(SCRIPT_DIR)
 
@@ -215,8 +216,11 @@ def get_script_library() -> str:
     """
     Get a list of available scripts in the library.
     
+    Scripts are stored in: <PROJECT_ROOT>/DynamoScripts/
+    All .json files in this directory are automatically discovered.
+    
     Returns:
-        JSON string list of script metadata.
+        JSON string list of script metadata (name, description, file path).
     """
     scripts = []
     try:
@@ -230,8 +234,12 @@ def get_script_library() -> str:
                     desc = data.get("description", "No description")
             except:
                 pass
-            scripts.append({"name": name, "description": desc})
-        return json.dumps(scripts, ensure_ascii=False)
+            scripts.append({
+                "name": name, 
+                "description": desc,
+                "path": f
+            })
+        return json.dumps(scripts, ensure_ascii=False, indent=2)
     except Exception as e:
         return f"Error reading library: {str(e)}"
 
@@ -240,13 +248,16 @@ def save_script_to_library(name: str, description: str, content_json: str) -> st
     """
     Save a Dynamo script to the library for future reuse.
     
+    Files are saved to: <PROJECT_ROOT>/DynamoScripts/<name>.json
+    This folder is the central repository for reusable Dynamo graph definitions.
+    
     Args:
         name: Unique name for the script (e.g., 'grid_2x2').
         description: Brief description of what the script does.
         content_json: The JSON instructions for nodes and connectors.
         
     Returns:
-        Status message.
+        Success message with absolute file path, or error message.
     """
     try:
         # Validate content JSON
@@ -261,7 +272,8 @@ def save_script_to_library(name: str, description: str, content_json: str) -> st
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
             
-        return f"Script '{name}' saved successfully."
+        abs_path = os.path.abspath(file_path)
+        return f"Script '{name}' saved successfully to: {abs_path}"
     except Exception as e:
         return f"Error saving script: {str(e)}"
 
@@ -270,11 +282,15 @@ def load_script_from_library(name: str) -> str:
     """
     Load a Dynamo script content from the library.
     
+    Loads from: <PROJECT_ROOT>/DynamoScripts/<name>.json
+    The returned JSON can be directly passed to execute_dynamo_instructions.
+    
     Args:
-        name: The name of the script to load.
+        name: The name of the script to load (without .json extension).
         
     Returns:
         The content JSON string (nodes and connectors) ready for execution.
+        Returns error message if script not found.
     """
     try:
         file_path = os.path.join(SCRIPT_DIR, f"{name}.json")

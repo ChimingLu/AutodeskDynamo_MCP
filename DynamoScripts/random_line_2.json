@@ -1,25 +1,25 @@
 {
-    "description": "Creates a Line between two random points (20, -15, 5) and (60, 40, 0).",
+    "description": "Creates a Line between two random points (10, 20, 30) and (50, 60, 70).",
     "content": {
         "nodes": [
             {
                 "id": "val_x1",
                 "name": "Number",
-                "value": 20,
+                "value": 10,
                 "x": 100,
                 "y": 100
             },
             {
                 "id": "val_y1",
                 "name": "Number",
-                "value": -15,
+                "value": 20,
                 "x": 100,
                 "y": 150
             },
             {
                 "id": "val_z1",
                 "name": "Number",
-                "value": 5,
+                "value": 30,
                 "x": 100,
                 "y": 200
             },
@@ -32,21 +32,21 @@
             {
                 "id": "val_x2",
                 "name": "Number",
-                "value": 60,
+                "value": 50,
                 "x": 100,
                 "y": 300
             },
             {
                 "id": "val_y2",
                 "name": "Number",
-                "value": 40,
+                "value": 60,
                 "x": 100,
                 "y": 350
             },
             {
                 "id": "val_z2",
                 "name": "Number",
-                "value": 0,
+                "value": 70,
                 "x": 100,
                 "y": 400
             },
