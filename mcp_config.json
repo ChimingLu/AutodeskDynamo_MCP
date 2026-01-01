@@ -1,0 +1,29 @@
+{
+    "user_info": {
+        "name": "LU",
+        "role": "BIM Specialist"
+    },
+    "paths": {
+        "scripts": "DynamoScripts",
+        "examples": "examples",
+        "tests": "tests",
+        "common_nodes": "DynamoViewExtension/common_nodes.json",
+        "deployment": "MCP_Listener_Package",
+        "view_extension_src": "DynamoViewExtension"
+    },
+    "rules": {
+        "test_scripts_suffix": "_test.py",
+        "example_scripts_prefix": "demo_",
+        "keep_temp_files": false,
+        "log_level": "INFO"
+    },
+    "deployment_info": {
+        "required_steps": [
+            "1. Build DynamoViewExtension project",
+            "2. Copy bin output to Dynamo packages folder",
+            "3. Start Dynamo and ensure ViewExtension is loaded",
+            "4. Run server.py"
+        ],
+        "target_platform": "Windows / Revit + Dynamo"
+    }
+}

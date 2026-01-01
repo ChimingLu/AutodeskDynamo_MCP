@@ -1,5 +1,10 @@
 from mcp.server.fastmcp import FastMCP
 import time
+import os
+import json
+import urllib.request
+import urllib.error
+import glob
 
 # 初始化 Server
 mcp = FastMCP("BIM_Assistant")
@@ -82,21 +87,20 @@ import urllib.error
 # 新增工具: Dynamo 自動化操作
 # ==========================================
 @mcp.tool()
-def execute_dynamo_instructions(instructions: str) -> str:
+def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = False) -> str:
     """
     Execute a set of instructions to create nodes and connections in Dynamo.
     
     Args:
         instructions: A JSON string describing the nodes and connections.
+        clear_before_execute: If True, clears the current workspace before placing new nodes.
+                              Use this to avoid overlapping with existing nodes.
                       Example:
                       {
                         "nodes": [
-                          {"id": "n1", "name": "Point.ByCoordinates", "x": 0, "y": 0},
-                          {"id": "n2", "name": "Number", "value": 10, "x": -100, "y": 0}
+                          {"id": "n1", "name": "Point.ByCoordinates", "x": 0, "y": 0}
                         ],
-                        "connectors": [
-                          {"from": "n2", "to": "n1", "fromPort": 0, "toPort": 0}
-                        ]
+                        "connectors": []
                       }
                       
     Returns:
@@ -107,9 +111,22 @@ def execute_dynamo_instructions(instructions: str) -> str:
     try:
         # Validate JSON
         try:
-            json.loads(instructions)
+            json_data = json.loads(instructions)
         except json.JSONDecodeError:
             return "Error: Invalid JSON format."
+
+        # If requested, clear workspace first
+        if clear_before_execute:
+            try:
+                clear_payload = json.dumps({"action": "clear_graph"})
+                req_clear = urllib.request.Request(
+                    url, data=clear_payload.encode('utf-8'),
+                    headers={'Content-Type': 'application/json'}, method='POST'
+                )
+                with urllib.request.urlopen(req_clear) as resp:
+                    resp.read()
+            except urllib.error.URLError:
+                return "❌ 失敗: 無法連線至 Dynamo。請確認 Dynamo 已開啟且已放置並執行 'StartMCPServer'。"
 
         req = urllib.request.Request(
             url, 
@@ -119,15 +136,12 @@ def execute_dynamo_instructions(instructions: str) -> str:
         )
         
         with urllib.request.urlopen(req) as response:
-            return f"Successfully sent instructions to Dynamo. Response: {response.read().decode('utf-8')}"
+            return f"✅ 成功發送指令至 Dynamo。回應: {response.read().decode('utf-8')}"
             
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        return f"Dynamo Server Error ({e.code}): {error_body}"
     except urllib.error.URLError as e:
-        return f"Failed to connect to Dynamo. Please ensure the Dynamo View Extension is installed and Dynamo is running. Error: {e}"
+        return f"❌ 失敗: 無al連線至 Dynamo (localhost:5050)。請確認：1. Dynamo 已開啟 2. 畫板中已放置並執行 'StartMCPServer'。 (錯誤訊息: {e})"
     except Exception as e:
-        return f"An error occurred: {str(e)}"
+        return f"发生錯誤: {str(e)}"
 
 # ==========================================
 # 新增工具: 列出可用節點
@@ -195,19 +209,59 @@ def analyze_workspace() -> str:
         with urllib.request.urlopen(req) as response:
             return response.read().decode('utf-8')
             
+    except urllib.error.URLError:
+        return "❌ 失敗: Dynamo 監聽器未啟動。請在 Dynamo 中放置 'StartMCPServer'。"
     except Exception as e:
-        return f"Error analyzing workspace: {str(e)}. Make sure the latest Dynamo Extension is deployed."
+        return f"Error analyzing workspace: {str(e)}"
+
+
+@mcp.tool()
+def clear_workspace() -> str:
+    """
+    Clear all nodes and connectors from the current Dynamo workspace.
+    Use this before starting a new design or when nodes are overlapping.
+    
+    Returns:
+        Status message.
+    """
+    url = "http://127.0.0.1:5050/mcp/"
+    payload = json.dumps({"action": "clear_graph"})
+    
+    try:
+        req = urllib.request.Request(
+            url, 
+            data=payload.encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req) as response:
+            return response.read().decode('utf-8')
+            
+    except Exception as e:
+        return f"Error clearing workspace: {str(e)}"
 
 
 
 # ==========================================
 # 新增工具: 腳本庫管理 (Script Library)
 # ==========================================
-import os
-import glob
+# ==========================================
+# 載入設定檔 (mcp_config.json)
+# ==========================================
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "mcp_config.json")
+CONFIG = {}
+if os.path.exists(CONFIG_PATH):
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            CONFIG = json.load(f)
+    except:
+        pass
 
-SCRIPT_DIR = os.path.join(os.path.dirname(__file__), "DynamoScripts")
-# 也可考慮存放在使用者的 AppData 以便持久化，但目前維持在專案夾內
+# 根據設定檔定義腳本目錄
+script_rel_path = CONFIG.get("paths", {}).get("scripts", "DynamoScripts")
+SCRIPT_DIR = os.path.join(os.path.dirname(__file__), script_rel_path)
+
 if not os.path.exists(SCRIPT_DIR):
     os.makedirs(SCRIPT_DIR)
 

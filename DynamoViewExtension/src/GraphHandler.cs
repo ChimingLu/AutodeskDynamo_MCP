@@ -68,6 +68,13 @@ namespace DynamoMCPListener
                     _searchCache.Clear();
                     return "{\"status\": \"Config reloaded\"}";
                 }
+
+                if (action == "clear_graph")
+                {
+                    _vm.Model.ClearCurrentWorkspace();
+                    _nodeIdMap.Clear();
+                    return "{\"status\": \"Graph cleared\"}";
+                }
                 
                 // 1. Create Nodes
                 var nodes = root["nodes"] as JArray;
@@ -445,6 +452,7 @@ namespace DynamoMCPListener
             
             if (!string.IsNullOrEmpty(tempId))
             {
+                // 如果 ID 已存在（可能是同一次 JSON 內的重複引用，或是舊的快取），清理它
                 _nodeIdMap[tempId] = dynamoGuid;
             }
 
@@ -483,7 +491,15 @@ namespace DynamoMCPListener
                 }
             }
 
-            if (nodeName == "Number" || nodeName == "Core.Input.Basic.DoubleInput")
+            // 移除名稱中的簽署資訊 (例如 @double,double,double)，因為 CreateNodeCommand 不支援
+            string creationName = nodeName;
+            if (creationName.Contains("@"))
+            {
+                creationName = creationName.Split('@')[0];
+                MCPLogger.Info($"Stripped signature for creation: {nodeName} -> {creationName}");
+            }
+
+            if (creationName == "Number" || creationName == "Core.Input.Basic.DoubleInput" || creationName == "Code Block")
             {
                  var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
                  _vm.Model.ExecuteCommand(cmd);
@@ -499,10 +515,10 @@ namespace DynamoMCPListener
             else
             {
                 try {
-                    var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, nodeName, x, y, false, false);
+                    var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, creationName, x, y, false, false);
                     _vm.Model.ExecuteCommand(cmd);
                 } catch (Exception ex) {
-                    MCPLogger.Error($"Failed to create node '{nodeName}': {ex.Message}");
+                    MCPLogger.Error($"Failed to create node '{creationName}': {ex.Message}");
                     throw; // Rethrow to be caught by HandleCommand
                 }
             }
