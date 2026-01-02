@@ -7,7 +7,7 @@
 
 ## 🚀 重大更新：自動啟動與中心化管理
 
-1.  **自動化連線**：部署後，只要開啟 Dynamo，MCP 監聽器會隨 View Extension **自動啟動**。您不再需要手動於畫板放置並執行 `StartMCPServer` 節點。
+1.  **連線管理**：雖然 View Extension 具備自動啟動功能，但為了確保連線穩定性與權限正確，**強烈建議**您在畫板中手動放置 `MCPControls.StartMCPServer` 節點。
 2.  **中心化設定 (`mcp_config.json`)**：全域路徑與使用者資訊由設定檔統一管理，確保腳本、範例與測試檔案存放有序且邏輯一致。
 
 ---
@@ -66,6 +66,9 @@
 
 > [!TIP]
 > **防止重疊功能**：執行 `execute_dynamo_instructions` 時，可設定 `clear_before_execute=True`，系統會在繪製新幾何前自動清空畫板。
+
+> [!IMPORTANT]
+> **確保連線穩定**：請務必在 Dynamo 畫板中放置 `MCPControls.StartMCPServer` 節點。這能確保 HTTP 伺服器在正確的 Context 下運作，避免因自動啟動機制被回收或權限不足導致的連線中斷。
 
 ---
 

@@ -82,19 +82,102 @@ def ask_ai_consultant(question: str, context: str = "") -> str:
 import json
 import urllib.request
 import urllib.error
+import subprocess
+
+def _get_system_dynamo_processes() -> list[int]:
+    """Get list of PIDs for DynamoSandbox.exe and Revit.exe"""
+    pids = []
+    try:
+        # Check for DynamoSandbox.exe and Revit.exe
+        cmd = 'tasklist /FI "IMAGENAME eq DynamoSandbox.exe" /FI "IMAGENAME eq Revit.exe" /FO CSV /NH'
+        # Note: tasklist filters are AND by default for different properties, but same property?
+        # Actually tasklist filters are additive if you simply run it? No, usually checking multiple images needs separate commands or logic.
+        # "IMAGENAME eq A" OR "IMAGENAME eq B" is not directly supported in one filter flag usually without /OR which doesn't exist.
+        # Let's run twice or just grep name.
+        # Simpler: List all locally and filter in python to be safe.
+        
+        output = subprocess.check_output("tasklist /FO CSV /NH", shell=True).decode('utf-8', errors='ignore')
+        for line in output.splitlines():
+            if not line.strip(): continue
+            parts = line.split(',')
+            if len(parts) < 2: continue
+            
+            # Remove quotes
+            image_name = parts[0].strip('"')
+            pid_str = parts[1].strip('"')
+            
+            if image_name.lower() in ["dynamosandbox.exe", "revit.exe"]:
+                if pid_str.isdigit():
+                    pids.append(int(pid_str))
+    except Exception:
+        pass
+    return pids
+
+def _check_dynamo_connection() -> tuple[bool, str]:
+    """
+    Helper to verify if Dynamo listener is reachable.
+    Also checks for Zombie processes if PID is available.
+    """
+    url = "http://127.0.0.1:5050/mcp/"
+    payload = json.dumps({"action": "get_graph_status"})
+    try:
+        req = urllib.request.Request(
+            url, data=payload.encode('utf-8'),
+            headers={'Content-Type': 'application/json'}, method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=2) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            
+            # 1. Check for PID (New Feature)
+            if "processId" in data:
+                connected_pid = int(data["processId"])
+                system_pids = _get_system_dynamo_processes()
+                
+                # Case A: Connected PID not found active
+                # (Note: tasklist might miss it if it closed very fast, but usually valid for zombies)
+                if connected_pid not in system_pids:
+                    # Case A: Connected PID not found active (Zombie or Phantom)
+                    return False, f"⚠️ 異常: 連線至 PID {connected_pid}，但該程序似乎已不存在或無法被 tasklist 偵測。請確認 Dynamo 是否正常執行。"
+                
+                # Case B: Multiple potential instances
+                # Case C: Connected PID is there, but there are others (Potential Zombie scenario)
+                if len(system_pids) > 1:
+                     # Identify if we are connected to one of them.
+                     other_pids = [p for p in system_pids if p != connected_pid]
+                     if other_pids:
+                         return False, f"⚠️ **嚴重警告**: 偵測到多個 Dynamo/Revit 程序 (PIDs: {system_pids})。\n目前連線至 PID: {connected_pid}。\n這通常表示舊的 Dynamo 未完全關閉 (Zombie Process)。\n請務必**強制結束**所有 Revit/Dynamo 程序後再重試，否則指令將無法正確送達。"
+
+            # 2. Check for StartMCPServer Node (New Feature)
+            # User wants to be warned if the node is missing, even if connection works (via auto-start)
+            has_start_node = False
+            if "nodes" in data and isinstance(data["nodes"], list):
+                for node in data["nodes"]:
+                    if node.get("name") == "MCPControls.StartMCPServer":
+                        has_start_node = True
+                        break
+            
+            if not has_start_node:
+                data["mcp_warning"] = "⚠️ 建議: 未偵測到 'StartMCPServer' 節點。雖然連線正常，但建議放置該節點以確保穩定性與視覺確認。"
+                return True, json.dumps(data)
+
+            return True, json.dumps(data) 
+            
+    except Exception as e:
+        return False, str(e)
 
 # ==========================================
 # 新增工具: Dynamo 自動化操作
 # ==========================================
 @mcp.tool()
-def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = False) -> str:
+def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = False, base_x: float = 0, base_y: float = 0) -> str:
     """
     Execute a set of instructions to create nodes and connections in Dynamo.
     
     Args:
         instructions: A JSON string describing the nodes and connections.
         clear_before_execute: If True, clears the current workspace before placing new nodes.
-                              Use this to avoid overlapping with existing nodes.
+        base_x: Optional X offset to add to all nodes.
+        base_y: Optional Y offset to add to all nodes.
                       Example:
                       {
                         "nodes": [
@@ -106,6 +189,11 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
     Returns:
         Status message.
     """
+    # 強制檢查連線
+    is_ok, status_or_err = _check_dynamo_connection()
+    if not is_ok:
+        return f"❌ 失敗: 無法連線至 Dynamo (localhost:5050)。請確認：1. Dynamo 已開啟 2. 確定有載入 DynamoMCPListener 插件。 (錯誤: {status_or_err})"
+
     url = "http://127.0.0.1:5050/mcp/"
     
     try:
@@ -114,6 +202,16 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
             json_data = json.loads(instructions)
         except json.JSONDecodeError:
             return "Error: Invalid JSON format."
+
+        # Apply offsets
+        if base_x != 0 or base_y != 0:
+            if "nodes" in json_data:
+                for node in json_data["nodes"]:
+                    if "x" in node:
+                        node["x"] = float(node["x"]) + base_x
+                    if "y" in node:
+                        node["y"] = float(node["y"]) + base_y
+            instructions = json.dumps(json_data)
 
         # If requested, clear workspace first
         if clear_before_execute:
@@ -126,7 +224,7 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
                 with urllib.request.urlopen(req_clear) as resp:
                     resp.read()
             except urllib.error.URLError:
-                return "❌ 失敗: 無法連線至 Dynamo。請確認 Dynamo 已開啟且已放置並執行 'StartMCPServer'。"
+                return "❌ 失敗: 清除工作區時發生連線中斷。"
 
         req = urllib.request.Request(
             url, 
@@ -138,10 +236,8 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
         with urllib.request.urlopen(req) as response:
             return f"✅ 成功發送指令至 Dynamo。回應: {response.read().decode('utf-8')}"
             
-    except urllib.error.URLError as e:
-        return f"❌ 失敗: 無al連線至 Dynamo (localhost:5050)。請確認：1. Dynamo 已開啟 2. 畫板中已放置並執行 'StartMCPServer'。 (錯誤訊息: {e})"
     except Exception as e:
-        return f"发生錯誤: {str(e)}"
+        return f"發生錯誤: {str(e)}"
 
 # ==========================================
 # 新增工具: 列出可用節點
@@ -164,6 +260,11 @@ def list_available_nodes(filter_text: str = "", search_scope: str = "default", d
     Returns:
         JSON string of available nodes with metadata.
     """
+    # 強制檢查連線
+    is_ok, status_or_err = _check_dynamo_connection()
+    if not is_ok:
+        return f"❌ 失敗: 無法連線至 Dynamo。 (錯誤: {status_or_err})"
+
     url = "http://127.0.0.1:5050/mcp/"
     payload = json.dumps({
         "action": "list_nodes", 
@@ -193,26 +294,11 @@ def analyze_workspace() -> str:
     Get the current state of all nodes in the Dynamo workspace, including errors and warnings.
     
     Returns:
-        JSON string containing node names and their execution states.
+        JSON string containing workspace name, node count, and individual node states.
     """
-    url = "http://127.0.0.1:5050/mcp/"
-    payload = json.dumps({"action": "get_graph_status"})
-    
-    try:
-        req = urllib.request.Request(
-            url, 
-            data=payload.encode('utf-8'),
-            headers={'Content-Type': 'application/json'},
-            method='POST'
-        )
-        
-        with urllib.request.urlopen(req) as response:
-            return response.read().decode('utf-8')
-            
-    except urllib.error.URLError:
-        return "❌ 失敗: Dynamo 監聽器未啟動。請在 Dynamo 中放置 'StartMCPServer'。"
-    except Exception as e:
-        return f"Error analyzing workspace: {str(e)}"
+    # 直接回傳檢查結果
+    is_ok, status_or_err = _check_dynamo_connection()
+    return status_or_err if is_ok else f"❌ 失敗: Dynamo 監聽器未啟動。 ({status_or_err})"
 
 
 @mcp.tool()
@@ -224,6 +310,11 @@ def clear_workspace() -> str:
     Returns:
         Status message.
     """
+    # 強制檢查連線
+    is_ok, status_or_err = _check_dynamo_connection()
+    if not is_ok:
+        return f"❌ 失敗: 無法清空，連線已中斷。 ({status_or_err})"
+
     url = "http://127.0.0.1:5050/mcp/"
     payload = json.dumps({"action": "clear_graph"})
     
@@ -332,7 +423,7 @@ def save_script_to_library(name: str, description: str, content_json: str) -> st
         return f"Error saving script: {str(e)}"
 
 @mcp.tool()
-def load_script_from_library(name: str) -> str:
+def load_script_from_library(name: str, base_x: float = 0, base_y: float = 0) -> str:
     """
     Load a Dynamo script content from the library.
     
@@ -341,6 +432,8 @@ def load_script_from_library(name: str) -> str:
     
     Args:
         name: The name of the script to load (without .json extension).
+        base_x: Optional X offset to add to all nodes in the script.
+        base_y: Optional Y offset to add to all nodes in the script.
         
     Returns:
         The content JSON string (nodes and connectors) ready for execution.
@@ -353,8 +446,18 @@ def load_script_from_library(name: str) -> str:
             
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # We return the inner content which is what execute_dynamo_instructions expects
-            return json.dumps(data.get("content", {}))
+            content = data.get("content", {})
+            
+            # Apply offsets
+            if base_x != 0 or base_y != 0:
+                if "nodes" in content:
+                    for node in content["nodes"]:
+                        if "x" in node:
+                            node["x"] = float(node["x"]) + base_x
+                        if "y" in node:
+                            node["y"] = float(node["y"]) + base_y
+            
+            return json.dumps(content)
     except Exception as e:
         return f"Error loading script: {str(e)}"
 

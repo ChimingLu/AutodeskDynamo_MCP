@@ -12,6 +12,7 @@ namespace DynamoMCPListener
     [IsVisibleInDynamoLibrary(false)]
     public class SimpleHttpServer
     {
+        public static readonly string AppSessionId = Guid.NewGuid().ToString();
         private HttpListener _listener;
         private ViewLoadedParams _dynamoParams;
         private bool _isRunning = false;

@@ -57,6 +57,9 @@ namespace DynamoMCPListener
             {
                 lock (_lockObj)
                 {
+                    string dir = Path.GetDirectoryName(MCPConfig.LOG_FILE_PATH);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
                     string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     string logEntry = $"[{timestamp}] [{level}] {message}\n";
                     File.AppendAllText(MCPConfig.LOG_FILE_PATH, logEntry);

@@ -71,9 +71,20 @@ namespace DynamoMCPListener
 
                 if (action == "clear_graph")
                 {
-                    _vm.Model.ClearCurrentWorkspace();
-                    _nodeIdMap.Clear();
-                    return "{\"status\": \"Graph cleared\"}";
+                    try {
+                        var nodesToDelete = _vm.Model.CurrentWorkspace.Nodes.Select(n => n.GUID).ToList();
+                        if (nodesToDelete.Count > 0)
+                        {
+                            _vm.Model.ExecuteCommand(new DynamoModel.DeleteModelCommand(nodesToDelete));
+                        }
+                        _nodeIdMap.Clear();
+                        return "{\"status\": \"Graph cleared\"}";
+                    } catch (Exception ex) {
+                        MCPLogger.Error("Failed to clear graph: " + ex.Message);
+                        // Fallback
+                        _vm.Model.ClearCurrentWorkspace();
+                        return "{\"status\": \"Graph cleared via fallback\"}";
+                    }
                 }
                 
                 // 1. Create Nodes
@@ -113,25 +124,25 @@ namespace DynamoMCPListener
             try
             {
                 var workspace = _vm.Model.CurrentWorkspace;
+                var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                
+                result["workspaceName"] = workspace.Name;
+                result["nodeCount"] = workspace.Nodes.Count();
+                result["workspaceType"] = workspace.GetType().Name;
+                result["processId"] = currentProcess.Id;
+                result["sessionId"] = SimpleHttpServer.AppSessionId;
+
+                MCPLogger.Info($"GetGraphStatus: Workspace='{workspace.Name}', Nodes={workspace.Nodes.Count()}, Type={workspace.GetType().Name}, PID={currentProcess.Id}, Session={SimpleHttpServer.AppSessionId}");
+
                 foreach (var node in workspace.Nodes)
                 {
                     var nodeObj = new JObject();
                     nodeObj["id"] = node.GUID.ToString();
                     nodeObj["name"] = node.Name;
                     nodeObj["state"] = node.State.ToString();
-                    
-                    // Get warning/error messages if any
-                    // Note: Dynamo nodes have a 'ToolTipText' or validation properties
-                    // In recent Dynamo versions, node.ErrorHighlight is used or specific properties.
-                    // A simple way is to check the node's state and potentially its warnings.
-                    
-                    var messages = new JArray();
-                    // Some common ways to get errors in Dynamo API:
-                    // node.ToolTipText often contains the error message shown in the UI
-                    // Or node.ValidationData (if available in this version)
-                    
-                    // We'll collect the Name and State for now, as getting the exact string 
-                    // can vary by Dynamo version/internal implementation.
+                    nodeObj["type"] = node.GetType().FullName;
+                    nodeObj["creationName"] = node.CreationName;
+                    nodeObj["description"] = node.Description;
                     
                     nodeList.Add(nodeObj);
                 }
@@ -501,6 +512,8 @@ namespace DynamoMCPListener
 
             if (creationName == "Number" || creationName == "Core.Input.Basic.DoubleInput" || creationName == "Code Block")
             {
+                 // For Code Block, we use the specific name "Code Block" and the command system will handle it.
+                 // We use the Guid list constructor as it is common in Dynamo 2.x/3.x.
                  var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
                  _vm.Model.ExecuteCommand(cmd);
                  
@@ -515,11 +528,13 @@ namespace DynamoMCPListener
             else
             {
                 try {
+                    // Try to create the node. If it's a ZeroTouch node, the creationName should be the FullName.
+                    // We use the Guid list constructor which is more standard for single node creation in some versions.
                     var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, creationName, x, y, false, false);
                     _vm.Model.ExecuteCommand(cmd);
                 } catch (Exception ex) {
                     MCPLogger.Error($"Failed to create node '{creationName}': {ex.Message}");
-                    throw; // Rethrow to be caught by HandleCommand
+                    throw; 
                 }
             }
         }
