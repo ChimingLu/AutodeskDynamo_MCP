@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "code_block_line",
+            "name": "Number",
+            "x": 300,
+            "y": 600,
+            "value": "Line.ByStartPointEndPoint(Point.ByCoordinates(0, 0, 500), Point.ByCoordinates(1000, 0, 500));"
+        }
+    ],
+    "connectors": []
+}

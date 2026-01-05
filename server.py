@@ -10,94 +10,51 @@ import glob
 mcp = FastMCP("BIM_Assistant")
 
 # ==========================================
-# 既有工具 (保留)
+# 工具列表
 # ==========================================
-@mcp.tool()
-def add(a: int, b: int) -> int:
-    """Basic addition."""
-    return a + b
-
-@mcp.tool()
-def get_material_specs(material_name: str) -> dict:
-    """Mock database search for materials."""
-    db = {"Concrete": 2400, "Steel": 7850}
-    val = db.get(material_name, 0)
-    return {"density": val, "unit": "kg/m3"}
-
-# ==========================================
-# 新增工具: AI 顧問
-# ==========================================
-@mcp.tool()
-def ask_ai_consultant(question: str, context: str = "") -> str:
-    """
-    Ask the AI Consultant a question about BIM, Revit API, or Dynamo strategies.
-    
-    Args:
-        question: The user's question (e.g., "How do I filter walls by height?").
-        context: Optional background info (e.g., list of current node names).
-        
-    Returns:
-        A text advice string.
-    """
-    # 模擬思考時間，增加真實感
-    time.sleep(1)
-    
-    q_lower = question.lower()
-    
-    # 這裡未來可以替換成 OpenAI / Gemini API call
-    # response = openai.ChatCompletion.create(...)
-    
-    # 目前的模擬邏輯 (Mock Logic)
-    if "filter" in q_lower and "wall" in q_lower:
-        return (
-            "💡 **AI 建議**: 若要篩選牆，建議使用 `Element.GetParameterValueByName` "
-            "讀取 'Unconnected Height'，然後搭配 `List.FilterByBoolMask`。\n"
-            "若要過濾類型，請使用 `Element.Name` 節點。"
-        )
-    
-    elif "warning" in q_lower or "error" in q_lower:
-        return (
-            "⚠️ **Debug 建議**: 遇到黃色警告通常是資料結構問題 (List Level)。"
-            "請檢查您的輸入是否需要 `List.Flatten`，或者改變節點的 L2/L3 設定。"
-        )
-        
-    elif "python" in q_lower:
-        return (
-            "🐍 **Python 提示**: 在 Dynamo Python Node 中，請記得 `UnwrapElement(IN[0])` "
-            "才能呼叫 Revit API 的原生方法。"
-        )
-        
-    elif "api" in q_lower:
-        return (
-            "📘 **API 知識**: Revit API 中，修改模型必須在 `Transaction` 內進行。"
-            "雖然 Dynamo 節點通常自動處理，但在 Python Script 中要特別注意 TransactionManager。"
-        )
-
-    # 預設回應
-    return (
-        f"🤖 **AI 收到問題**: '{question}'\n"
-        f"目前我尚未連接真實的 LLM (如 GPT-4)，但您可以問我關於 'filter walls', 'python script', 或 'api' 的問題來測試我的關鍵字觸發功能。"
-    )
 
 import json
 import urllib.request
 import urllib.error
 import subprocess
+import datetime
 
-def _get_system_dynamo_processes() -> list[int]:
-    """Get list of PIDs for DynamoSandbox.exe and Revit.exe"""
+# Global cache for process IDs
+_cached_pids = []
+_last_process_check_time = 0
+_PROCESS_CACHE_TTL = 60  # Cache duration in seconds
+_last_session_id = None # Track Dynamo Session ID
+
+def _get_system_dynamo_processes(force_refresh: bool = False) -> list[int]:
+    """
+    Get list of PIDs for DynamoSandbox.exe and Revit.exe
+    Uses caching to avoid calling 'tasklist' too frequently.
+    """
+    global _cached_pids, _last_process_check_time
+    
+    current_time = time.time()
+    
+    # Return cached if within TTL and not forced
+    if not force_refresh and (current_time - _last_process_check_time < _PROCESS_CACHE_TTL):
+        return _cached_pids
+
     pids = []
     try:
         # Check for DynamoSandbox.exe and Revit.exe
-        cmd = 'tasklist /FI "IMAGENAME eq DynamoSandbox.exe" /FI "IMAGENAME eq Revit.exe" /FO CSV /NH'
-        # Note: tasklist filters are AND by default for different properties, but same property?
-        # Actually tasklist filters are additive if you simply run it? No, usually checking multiple images needs separate commands or logic.
-        # "IMAGENAME eq A" OR "IMAGENAME eq B" is not directly supported in one filter flag usually without /OR which doesn't exist.
-        # Let's run twice or just grep name.
-        # Simpler: List all locally and filter in python to be safe.
+        # Using specific filters can be faster than listing all
+        output = subprocess.check_output(
+            'tasklist /FI "IMAGENAME eq DynamoSandbox.exe" /FO CSV /NH', 
+            shell=True
+        ).decode('utf-8', errors='ignore')
         
-        output = subprocess.check_output("tasklist /FO CSV /NH", shell=True).decode('utf-8', errors='ignore')
-        for line in output.splitlines():
+        output_revit = subprocess.check_output(
+            'tasklist /FI "IMAGENAME eq Revit.exe" /FO CSV /NH', 
+            shell=True
+        ).decode('utf-8', errors='ignore')
+        
+        combined_output = output + "\n" + output_revit
+        
+        for line in combined_output.splitlines():
             if not line.strip(): continue
             parts = line.split(',')
             if len(parts) < 2: continue
@@ -106,11 +63,20 @@ def _get_system_dynamo_processes() -> list[int]:
             image_name = parts[0].strip('"')
             pid_str = parts[1].strip('"')
             
+            # Double check name (though filter handles it, good for safety)
             if image_name.lower() in ["dynamosandbox.exe", "revit.exe"]:
                 if pid_str.isdigit():
                     pids.append(int(pid_str))
+        
+        # Update cache
+        _cached_pids = pids
+        _last_process_check_time = current_time
+        
     except Exception:
+        # On error, return empty but don't update cache time to retry sooner? 
+        # Or just keep old cache? Let's return empty for safety.
         pass
+        
     return pids
 
 def _check_dynamo_connection() -> tuple[bool, str]:
@@ -128,10 +94,30 @@ def _check_dynamo_connection() -> tuple[bool, str]:
         with urllib.request.urlopen(req, timeout=2) as response:
             data = json.loads(response.read().decode('utf-8'))
             
+            # 0. Check for Session Change (New Feature)
+            global _last_session_id
+            current_session_id = data.get("sessionId")
+            
+            if current_session_id:
+                if _last_session_id is not None and current_session_id != _last_session_id:
+                    print(f"🔄 [SESSION CHANGED] Detected new Dynamo session: {_last_session_id} -> {current_session_id}")
+                    # Optional: We could invalidate caches here if needed
+                    # _commonNodesCache = None 
+                
+                if _last_session_id != current_session_id:
+                     _last_session_id = current_session_id
+            
             # 1. Check for PID (New Feature)
             if "processId" in data:
                 connected_pid = int(data["processId"])
-                system_pids = _get_system_dynamo_processes()
+                # Request fresh PIDs only if we suspect a mismatch, but for general check use cache first?
+                # Actually, if we are verifying connection, we might want to be sure. 
+                # But to save time, let's use cache first. If not found, THEN force refresh.
+                system_pids = _get_system_dynamo_processes(force_refresh=False)
+                
+                if connected_pid not in system_pids:
+                     # Try one more time with force refresh
+                     system_pids = _get_system_dynamo_processes(force_refresh=True)
                 
                 # Case A: Connected PID not found active
                 # (Note: tasklist might miss it if it closed very fast, but usually valid for zombies)
@@ -462,5 +448,21 @@ def load_script_from_library(name: str, base_x: float = 0, base_y: float = 0) ->
         return f"Error loading script: {str(e)}"
 
 if __name__ == "__main__":
-    print("Starting BIM Assistant MCP Server (Version 2.2)...")
+    print("==========================================")
+    print("   BIM Assistant MCP Server (v2.3)   ")
+    print("==========================================")
+    print(f"Server Path: {os.path.abspath(__file__)}")
+    print(f"Config Path: {CONFIG_PATH}")
+    if CONFIG:
+        print("✅ Configuration loaded successfully.")
+    else:
+        print("⚠️  Warning: Configuration NOT loaded or empty.")
+    
+    print(f"Script Library: {SCRIPT_DIR}")
+    if not os.path.exists(SCRIPT_DIR):
+        print(f"Creating script directory: {SCRIPT_DIR}")
+        os.makedirs(SCRIPT_DIR)
+    
+    print("Starting FastMCP Server...")
+    print("==========================================")
     mcp.run(transport="sse")

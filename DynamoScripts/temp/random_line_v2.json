@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "line_v2",
+            "name": "Number",
+            "x": 500,
+            "y": 700,
+            "value": "Line.ByStartPointEndPoint(Point.ByCoordinates(200, 200, 0), Point.ByCoordinates(800, 800, 500));"
+        }
+    ],
+    "connectors": []
+}

@@ -1,0 +1,62 @@
+{
+    "nodes": [
+        {
+            "id": "p1",
+            "name": "Point.ByCoordinates",
+            "x": 100,
+            "y": 100
+        },
+        {
+            "id": "val_x",
+            "name": "Number",
+            "x": 100,
+            "y": 300,
+            "value": "1000"
+        },
+        {
+            "id": "val_y",
+            "name": "Number",
+            "x": 100,
+            "y": 400,
+            "value": "500"
+        },
+        {
+            "id": "p2",
+            "name": "Point.ByCoordinates",
+            "x": 400,
+            "y": 300
+        },
+        {
+            "id": "line1",
+            "name": "Line.ByStartPointEndPoint",
+            "x": 700,
+            "y": 200
+        }
+    ],
+    "connectors": [
+        {
+            "from": "val_x",
+            "fromPort": 0,
+            "to": "p2",
+            "toPort": 0
+        },
+        {
+            "from": "val_y",
+            "fromPort": 0,
+            "to": "p2",
+            "toPort": 1
+        },
+        {
+            "from": "p1",
+            "fromPort": 0,
+            "to": "line1",
+            "toPort": 0
+        },
+        {
+            "from": "p2",
+            "fromPort": 0,
+            "to": "line1",
+            "toPort": 1
+        }
+    ]
+}
