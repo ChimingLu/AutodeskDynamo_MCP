@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "cuboid_new_1",
+            "name": "Number",
+            "value": "Cuboid.ByLengths(Point.ByCoordinates(0, 0, 0), 10, 10, 10);",
+            "x": 400,
+            "y": 300
+        }
+    ],
+    "connectors": []
+}

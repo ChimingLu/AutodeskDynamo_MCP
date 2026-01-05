@@ -12,7 +12,11 @@ namespace DynamoMCPListener
     [IsVisibleInDynamoLibrary(false)]
     public class SimpleHttpServer
     {
-        public static readonly string AppSessionId = Guid.NewGuid().ToString();
+        // Global tracker for takeover logic
+        private static SimpleHttpServer _currentInstance;
+        private static readonly object _instanceLock = new object();
+
+        public readonly string InstanceSessionId = Guid.NewGuid().ToString();
         private HttpListener _listener;
         private ViewLoadedParams _dynamoParams;
         private bool _isRunning = false;
@@ -22,7 +26,7 @@ namespace DynamoMCPListener
         public SimpleHttpServer(ViewLoadedParams p)
         {
             _dynamoParams = p;
-            if (p.DynamoWindow.DataContext is DynamoViewModel vm) _handler = new GraphHandler(vm);
+            if (p.DynamoWindow.DataContext is DynamoViewModel vm) _handler = new GraphHandler(vm, InstanceSessionId);
             _dispatcher = p.DynamoWindow.Dispatcher;
             _listener = new HttpListener();
             _listener.Prefixes.Add(MCPConfig.ServerUrl);
@@ -30,7 +34,7 @@ namespace DynamoMCPListener
 
         public SimpleHttpServer(DynamoViewModel vm, System.Windows.Threading.Dispatcher dispatcher)
         {
-            _handler = new GraphHandler(vm);
+            _handler = new GraphHandler(vm, InstanceSessionId);
             _dispatcher = dispatcher;
             _listener = new HttpListener();
             _listener.Prefixes.Add(MCPConfig.ServerUrl);
@@ -39,12 +43,29 @@ namespace DynamoMCPListener
         public void Start()
         {
             if (_isRunning) return;
-            try {
-                _listener.Start();
-                _isRunning = true;
-                Task.Run(() => ListenLoop());
-            } catch (Exception) {
-                // Handle port busy or permissions
+
+            lock (_instanceLock)
+            {
+                // FORCE TAKEOVER: Stop any existing instance in the same process
+                if (_currentInstance != null)
+                {
+                    try {
+                        MCPLogger.Info($"[SimpleHttpServer] Force Takeover: Stopping old instance {_currentInstance.InstanceSessionId}");
+                        _currentInstance.Stop();
+                    } catch (Exception ex) {
+                        MCPLogger.Error($"[SimpleHttpServer] Error stopping old instance: {ex.Message}");
+                    }
+                }
+                
+                try {
+                    _listener.Start();
+                    _isRunning = true;
+                    _currentInstance = this;
+                    Task.Run(() => ListenLoop());
+                    MCPLogger.Info($"[SimpleHttpServer] Instance started: {InstanceSessionId}");
+                } catch (Exception ex) {
+                    MCPLogger.Error($"[SimpleHttpServer] Failed to start listener: {ex.Message}");
+                }
             }
         }
 

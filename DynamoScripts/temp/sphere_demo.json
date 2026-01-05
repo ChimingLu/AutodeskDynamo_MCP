@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "sphere1",
+            "name": "Number",
+            "value": "Sphere.ByCenterPointRadius(Point.ByCoordinates(0, 0, 0), 10);",
+            "x": 400,
+            "y": 400
+        }
+    ],
+    "connectors": []
+}

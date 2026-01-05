@@ -17,12 +17,25 @@
         "keep_temp_files": false,
         "log_level": "INFO"
     },
+    "connection": {
+        "timeout_seconds": 5,
+        "retry_attempts": 3,
+        "health_check_enabled": true
+    },
     "deployment_info": {
+        "version": "2.4",
+        "last_updated": "2026-01-05",
         "required_steps": [
             "1. Build DynamoViewExtension project",
             "2. Copy bin output to Dynamo packages folder",
             "3. Start Dynamo and ensure ViewExtension is loaded",
             "4. Run server.py"
+        ],
+        "new_features": [
+            "Log rotation (10MB limit, 3 backups)",
+            "Health check endpoint (/health)",
+            "Enhanced error tracking",
+            "Configurable connection timeout"
         ],
         "target_platform": "Windows / Revit + Dynamo"
     }

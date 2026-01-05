@@ -37,10 +37,16 @@ namespace DynamoMCPListener
             MCPLogger.Info("Loaded called");
             try 
             {
+                // Register window closed event for cleaner shutdown
+                p.DynamoWindow.Closed += (s, e) => {
+                    MCPLogger.Info("[ViewExtension] Dynamo Window manual closed detected.");
+                    Shutdown();
+                };
+
                 _server = new SimpleHttpServer(p);
                 _server.Start();
                 MCPLogger.Info($"Server started on port {MCPConfig.SERVER_PORT}");
-                MessageBox.Show($"MCP Listener Started on Port {MCPConfig.SERVER_PORT}");
+                // MessageBox.Show($"MCP Listener Started on Port {MCPConfig.SERVER_PORT}");
             }
             catch (Exception ex)
             {
@@ -51,13 +57,24 @@ namespace DynamoMCPListener
 
         public void Shutdown()
         {
-            MCPLogger.Info("Shutdown called");
-            _server?.Stop();
+            MCPLogger.Info("[ViewExtension] Shutdown called - stopping all MCP servers");
+            
+            // Stop ViewExtension's auto-started server
+            if (_server != null)
+            {
+                _server.Stop();
+                MCPLogger.Info("[ViewExtension] Auto-started server stopped");
+                _server = null;
+            }
+            
+            // Stop manually-started server from MCPControls.StartMCPServer node
+            MCPControls.StopStaticServer();
         }
 
         public void Dispose()
         {
-            _server?.Stop();
+            MCPLogger.Info("[ViewExtension] Dispose called");
+            Shutdown();
         }
     }
 
@@ -139,11 +156,35 @@ namespace DynamoMCPListener
             {
                 _staticServer = new SimpleHttpServer(vm, dispatcher);
                 _staticServer.Start();
+                MCPLogger.Info("[StartMCPServer] Static server started on Port 5050");
                 return "MCP Server Started Successfully on Port 5050";
             }
             else
             {
+                MCPLogger.Info("[StartMCPServer] Server already running, skipping");
                 return "MCP Server is already running";
+            }
+        }
+        
+        [IsVisibleInDynamoLibrary(true)]
+        public static string StopMCPServer()
+        {
+            return StopStaticServer();
+        }
+        
+        internal static string StopStaticServer()
+        {
+            if (_staticServer != null)
+            {
+                _staticServer.Stop();
+                _staticServer = null;
+                MCPLogger.Info("[StopMCPServer] Static server stopped and cleaned up");
+                return "MCP Server stopped successfully";
+            }
+            else
+            {
+                MCPLogger.Info("[StopMCPServer] No server running");
+                return "No MCP Server is currently running";
             }
         }
     }

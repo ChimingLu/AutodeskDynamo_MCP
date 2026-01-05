@@ -1,0 +1,40 @@
+{
+    "description": "Creates a simple sphere at origin",
+    "content": {
+        "nodes": [
+            {
+                "id": "pt",
+                "name": "Point.ByCoordinates",
+                "x": 200,
+                "y": 200
+            },
+            {
+                "id": "r",
+                "name": "Number",
+                "value": 5,
+                "x": 200,
+                "y": 300
+            },
+            {
+                "id": "sphere",
+                "name": "Sphere.ByCenterPointRadius",
+                "x": 500,
+                "y": 250
+            }
+        ],
+        "connectors": [
+            {
+                "from": "pt",
+                "to": "sphere",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "r",
+                "to": "sphere",
+                "fromPort": 0,
+                "toPort": 1
+            }
+        ]
+    }
+}

@@ -16,6 +16,7 @@ namespace DynamoMCPListener
     public class GraphHandler
     {
         private DynamoViewModel _vm;
+        private string _sessionId;
         
         // Map user-provided IDs (e.g., "node1") to actual Dynamo GUIDs
         private Dictionary<string, Guid> _nodeIdMap = new Dictionary<string, Guid>();
@@ -23,18 +24,21 @@ namespace DynamoMCPListener
         // 全域節點索引，加速搜尋與放置
         private static Dictionary<string, NodeSearchElement> _globalNodeIndex = null;
         private static readonly object _indexLock = new object();
+        private static readonly DateTime _serverStartTime = DateTime.Now;
 
-        public GraphHandler(ViewLoadedParams p)
+        public GraphHandler(ViewLoadedParams p, string sessionId)
         {
             if (p.DynamoWindow.DataContext is DynamoViewModel vm)
             {
                 _vm = vm;
             }
+            _sessionId = sessionId;
         }
 
-        public GraphHandler(DynamoViewModel vm)
+        public GraphHandler(DynamoViewModel vm, string sessionId)
         {
             _vm = vm;
+            _sessionId = sessionId;
         }
 
         public string HandleCommand(string json)
@@ -59,6 +63,11 @@ namespace DynamoMCPListener
                 if (action == "get_graph_status")
                 {
                     return GetGraphStatus();
+                }
+
+                if (action == "health_check")
+                {
+                    return GetHealthCheck();
                 }
 
                 if (action == "reload_config")
@@ -130,9 +139,9 @@ namespace DynamoMCPListener
                 result["nodeCount"] = workspace.Nodes.Count();
                 result["workspaceType"] = workspace.GetType().Name;
                 result["processId"] = currentProcess.Id;
-                result["sessionId"] = SimpleHttpServer.AppSessionId;
+                result["sessionId"] = _sessionId;
 
-                MCPLogger.Info($"GetGraphStatus: Workspace='{workspace.Name}', Nodes={workspace.Nodes.Count()}, Type={workspace.GetType().Name}, PID={currentProcess.Id}, Session={SimpleHttpServer.AppSessionId}");
+                MCPLogger.Info($"GetGraphStatus: Workspace='{workspace.Name}', Nodes={workspace.Nodes.Count()}, Type={workspace.GetType().Name}, PID={currentProcess.Id}, Session={_sessionId}");
 
                 foreach (var node in workspace.Nodes)
                 {
@@ -167,6 +176,51 @@ namespace DynamoMCPListener
                 error["details"] = details;
             }
             return error.ToString();
+        }
+
+        /// <summary>
+        /// 健康檢查端點：回傳系統狀態和統計資訊
+        /// </summary>
+        private string GetHealthCheck()
+        {
+            var result = new JObject();
+
+            try
+            {
+                var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                var uptime = DateTime.Now - _serverStartTime;
+
+                result["status"] = "healthy";
+                result["version"] = "2.3";
+                result["sessionId"] = _sessionId;
+                result["processId"] = currentProcess.Id;
+                result["uptimeSeconds"] = (int)uptime.TotalSeconds;
+                result["timestamp"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+                if (_vm?.Model?.CurrentWorkspace != null)
+                {
+                    var workspace = _vm.Model.CurrentWorkspace;
+                    result["workspace"] = new JObject
+                    {
+                        ["name"] = workspace.Name,
+                        ["nodeCount"] = workspace.Nodes.Count(),
+                        ["type"] = workspace.GetType().Name
+                    };
+                }
+
+                result["cacheStatus"] = new JObject
+                {
+                    ["commonNodesLoaded"] = _commonNodesCache != null,
+                    ["searchCacheSize"] = _searchCache.Count
+                };
+            }
+            catch (Exception ex)
+            {
+                result["status"] = "unhealthy";
+                result["error"] = ex.Message;
+            }
+
+            return result.ToString();
         }
 
         private static List<JObject> _commonNodesCache = null;

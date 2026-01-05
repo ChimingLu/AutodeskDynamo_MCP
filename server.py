@@ -25,6 +25,13 @@ _last_process_check_time = 0
 _PROCESS_CACHE_TTL = 60  # Cache duration in seconds
 _last_session_id = None # Track Dynamo Session ID
 
+# Global state tracking for restart detection
+_last_known_state = {
+    "nodeCount": 0,
+    "hasStartNode": False,
+    "timestamp": 0
+}
+
 def _get_system_dynamo_processes(force_refresh: bool = False) -> list[int]:
     """
     Get list of PIDs for DynamoSandbox.exe and Revit.exe
@@ -72,12 +79,81 @@ def _get_system_dynamo_processes(force_refresh: bool = False) -> list[int]:
         _cached_pids = pids
         _last_process_check_time = current_time
         
-    except Exception:
-        # On error, return empty but don't update cache time to retry sooner? 
-        # Or just keep old cache? Let's return empty for safety.
-        pass
+    except subprocess.CalledProcessError as e:
+        import sys
+        print(f"⚠️ [進程查詢失敗] tasklist 執行錯誤: {e}", file=sys.stderr)
+        print(f"   Return Code: {e.returncode}, Output: {e.output}", file=sys.stderr)
+        # Return cached data if available, otherwise empty
+        return _cached_pids if _cached_pids else []
+    except UnicodeDecodeError as e:
+        import sys
+        print(f"⚠️ [編碼錯誤] tasklist 輸出解碼失敗: {e}", file=sys.stderr)
+        return _cached_pids if _cached_pids else []
+    except Exception as e:
+        import sys, traceback
+        print(f"⚠️ [未預期錯誤] 進程查詢失敗: {e}", file=sys.stderr)
+        print(f"   詳細資訊:\n{traceback.format_exc()}", file=sys.stderr)
+        return _cached_pids if _cached_pids else []
         
     return pids
+
+def _detect_potential_restart(data: dict) -> tuple[bool, str]:
+    """
+    偵測可能的 Dynamo 程式重啟
+    使用啟發式方法：節點數劇減 + StartMCPServer 消失
+    
+    Args:
+        data: 從 get_graph_status 回傳的資料
+        
+    Returns:
+        (is_restart, reason): 是否可能重啟，以及原因說明
+    """
+    global _last_known_state
+    
+    current_count = data.get("nodeCount", 0)
+    current_has_start = any(n.get("name") == "MCPControls.StartMCPServer" 
+                           for n in data.get("nodes", []))
+    
+    # 初始化（第一次調用）
+    if _last_known_state["timestamp"] == 0:
+        _last_known_state.update({
+            "nodeCount": current_count,
+            "hasStartNode": current_has_start,
+            "timestamp": time.time()
+        })
+        return False, ""
+    
+    restart_detected = False
+    reasons = []
+    
+    # 檢查 1：節點數劇減（>= 3 降至 <= 2，且沒有 StartMCPServer）
+    if _last_known_state["nodeCount"] >= 3 and current_count <= 2:
+        # 進一步檢查：如果只剩 StartMCPServer，更可能是重啟
+        if not current_has_start or current_count <= 1:
+            restart_detected = True
+            reasons.append(f"節點數從 {_last_known_state['nodeCount']} 劇減至 {current_count}")
+    
+    # 檢查 2：StartMCPServer 節點消失（且之前存在）
+    if _last_known_state["hasStartNode"] and not current_has_start and current_count > 0:
+        restart_detected = True
+        reasons.append("StartMCPServer 節點消失")
+    
+    # 檢查 3：節點數歸零但之前大於 1
+    if _last_known_state["nodeCount"] > 1 and current_count == 0:
+        restart_detected = True
+        reasons.append("工作區已清空")
+    
+    # 更新狀態
+    _last_known_state.update({
+        "nodeCount": current_count,
+        "hasStartNode": current_has_start,
+        "timestamp": time.time()
+    })
+    
+    if restart_detected:
+        return True, "; ".join(reasons)
+    
+    return False, ""
 
 def _check_dynamo_connection() -> tuple[bool, str]:
     """
@@ -86,12 +162,16 @@ def _check_dynamo_connection() -> tuple[bool, str]:
     """
     url = "http://127.0.0.1:5050/mcp/"
     payload = json.dumps({"action": "get_graph_status"})
+    
+    # 從配置檔讀取超時參數，提供預設值確保向後相容
+    timeout_seconds = CONFIG.get("connection", {}).get("timeout_seconds", 5)
+    
     try:
         req = urllib.request.Request(
             url, data=payload.encode('utf-8'),
             headers={'Content-Type': 'application/json'}, method='POST'
         )
-        with urllib.request.urlopen(req, timeout=2) as response:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as response:
             data = json.loads(response.read().decode('utf-8'))
             
             # 0. Check for Session Change (New Feature)
@@ -144,11 +224,28 @@ def _check_dynamo_connection() -> tuple[bool, str]:
             
             if not has_start_node:
                 data["mcp_warning"] = "⚠️ 建議: 未偵測到 'StartMCPServer' 節點。雖然連線正常，但建議放置該節點以確保穩定性與視覺確認。"
-                return True, json.dumps(data)
+            
+            # 3. Check for potential Dynamo restart
+            restart_detected, restart_reason = _detect_potential_restart(data)
+            if restart_detected:
+                warning_msg = f"🔄 **偵測到可能的 Dynamo 重啟**: {restart_reason}\n\n建議您重新放置 'MCPControls.StartMCPServer' 節點以確保連線穩定。"
+                data["mcp_restart_warning"] = warning_msg
+                print(f"🔄 [POTENTIAL RESTART] {restart_reason}")
 
             return True, json.dumps(data) 
             
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP 錯誤 {e.code}: {e.reason} - Dynamo 伺服器回應異常"
+    except urllib.error.URLError as e:
+        if "timed out" in str(e.reason).lower():
+            return False, f"連線逾時 ({timeout_seconds}秒) - Dynamo 可能未啟動或伺服器未回應"
+        return False, f"連線失敗: {e.reason} - 請確認 Dynamo 是否正在執行"
+    except json.JSONDecodeError as e:
+        return False, f"JSON 解析錯誤: {e} - 伺服器回應格式異常"
     except Exception as e:
+        import traceback
+        error_detail = f"未預期錯誤: {e}\n詳細資訊:\n{traceback.format_exc()}"
+        print(f"⚠️ [連線檢查失敗] {error_detail}", file=sys.stderr)
         return False, str(e)
 
 # ==========================================

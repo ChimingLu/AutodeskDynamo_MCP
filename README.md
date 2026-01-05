@@ -22,7 +22,7 @@
 2.  **Dynamo Extension (`DynamoViewExtension/`)**:
     - C# 開發，具備自動載入功能。
     - 接收 JSON 指令並透過 `GraphHandler` 呼叫 Dynamo API。
-    - **穩定修復**：已解決節點簽名 (@) 導致的建立失敗問題。
+    - **連線強韌化 (v2.3)**：實作「強制奪取 (Force Takeover)」機制與視窗生命週期（Window.Closed）自動清理功能，有效解決 Revit 多視窗環境下的連線鎖死問題。
 
 3.  **MCP Client**:
     - **Claude Desktop / AI Agent**: 透過設定檔整合 `server.py`。
@@ -39,6 +39,8 @@
 - `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。
 - `examples/`: 提供給開發者的基準範例。
 - `deploy.ps1`: **[一鍵部署]** 編譯並安裝插件至 Dynamo 套件路徑。
+- **`MCP_GUIDELINES.md`**: **[AI 必讀]** 完整的操作規範與節點創建方法。
+- **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例與故障排除指南。
 
 ---
 
@@ -71,6 +73,36 @@
 > **確保連線穩定**：請務必在 Dynamo 畫板中放置 `MCPControls.StartMCPServer` 節點。這能確保 HTTP 伺服器在正確的 Context 下運作，避免因自動啟動機制被回收或權限不足導致的連線中斷。
 
 ---
+
+## 🏥 系統健康檢查
+
+新版本支援健康檢查端點，可即時查詢系統狀態和診斷問題：
+
+**使用範例**:
+```python
+import urllib.request, json
+
+req = urllib.request.Request(
+    "http://127.0.0.1:5050/mcp/",
+    data=json.dumps({"action": "health_check"}).encode(),
+    headers={'Content-Type': 'application/json'}
+)
+response = urllib.request.urlopen(req)
+health = json.loads(response.read().decode())
+print(f"狀態: {health['status']}, 運行時間: {health['uptimeSeconds']}秒")
+```
+
+**回應範例**:
+```json
+{
+  "status": "healthy",
+  "version": "2.3",
+  "sessionId": "abc-123...",
+  "processId": 12345,
+  "uptimeSeconds": 3600,
+  "workspace": {"name": "Home", "nodeCount": 15}
+}
+```
 
 ## 📖 使用與控制 (Claude Desktop)
 

@@ -1,0 +1,41 @@
+{
+    "description": "Creates a line using Code Block",
+    "content": {
+        "nodes": [
+            {
+                "id": "cb1",
+                "name": "Code Block",
+                "code": "Point.ByCoordinates(5, 5, 0);",
+                "x": 200,
+                "y": 150
+            },
+            {
+                "id": "cb2",
+                "name": "Code Block",
+                "code": "Point.ByCoordinates(15, 15, 5);",
+                "x": 200,
+                "y": 300
+            },
+            {
+                "id": "line",
+                "name": "Line.ByStartPointEndPoint",
+                "x": 500,
+                "y": 225
+            }
+        ],
+        "connectors": [
+            {
+                "from": "cb1",
+                "to": "line",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "cb2",
+                "to": "line",
+                "fromPort": 0,
+                "toPort": 1
+            }
+        ]
+    }
+}

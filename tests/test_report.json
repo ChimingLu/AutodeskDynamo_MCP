@@ -1,0 +1,90 @@
+{
+  "summary": {
+    "total": 10,
+    "passed": 9,
+    "failed": 0,
+    "timeout": 1,
+    "error": 0,
+    "duration_seconds": 51.52002429962158
+  },
+  "results": [
+    {
+      "script": "check_dynamo.py",
+      "status": "PASS",
+      "duration": 0.10346078872680664,
+      "stdout": "Analyzing workspace status...\nError: HTTP Error 404: Not Found\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "check_workspace.py",
+      "status": "PASS",
+      "duration": 2.8649630546569824,
+      "stdout": "Analyzing workspace...\nError: unhandled errors in a TaskGroup (1 sub-exception)\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "list_nodes_test.py",
+      "status": "PASS",
+      "duration": 2.82749605178833,
+      "stdout": "Connecting to MCP Server...\nConnected to SSE.\nSearching for 'Solid' nodes...\nError: unhandled errors in a TaskGroup (1 sub-exception)\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "search_aqua.py",
+      "status": "PASS",
+      "duration": 2.867309093475342,
+      "stdout": "Searching for 'Aqua' nodes...\nError: unhandled errors in a TaskGroup (1 sub-exception)\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "search_clockwork.py",
+      "status": "PASS",
+      "duration": 2.850736379623413,
+      "stdout": "Searching for 'Clockwork' nodes...\nError: unhandled errors in a TaskGroup (1 sub-exception)\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "search_color.py",
+      "status": "PASS",
+      "duration": 2.8474020957946777,
+      "stdout": "Searching for 'Color' nodes...\nError: unhandled errors in a TaskGroup (1 sub-exception)\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "place_aqua.py",
+      "status": "PASS",
+      "duration": 2.8419840335845947,
+      "stdout": "Placing Clockwork 'Color.Aqua' node...\nError: unhandled errors in a TaskGroup (1 sub-exception)\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "draw_line.py",
+      "status": "PASS",
+      "duration": 2.1396098136901855,
+      "stdout": "Clearing workspace...\nError: <urlopen error [WinError 10061] 無法連線，因為目標電腦拒絕連線。>\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "draw_line_3d.py",
+      "status": "PASS",
+      "duration": 2.139091968536377,
+      "stdout": "發送 3D 直線指令 (包含不同的 XYZ 數值)...\n錯誤: <urlopen error [WinError 10061] 無法連線，因為目標電腦拒絕連線。>\n",
+      "stderr": "",
+      "returncode": 0
+    },
+    {
+      "script": "performance_test.py",
+      "status": "TIMEOUT",
+      "duration": 30.035799026489258,
+      "error": "測試執行超時 (30秒)"
+    }
+  ]
+}
