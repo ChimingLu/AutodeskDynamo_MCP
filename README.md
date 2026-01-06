@@ -117,6 +117,10 @@ print(f"狀態: {health['status']}, 運行時間: {health['uptimeSeconds']}秒")
 
 ---
 
-## ⚖️ 授權及引用
-本專案採用 **MIT License**。
-部分連線控制邏輯參考了 Clockwork for Dynamo 與常用流量控制節點 (Passthrough, Gate 等)。
+## ⚖️ 權利聲明 (Copyright)
+本專案目前為 **私有專案 (Private)**，僅供受邀者進行測試與評估。
+
+Copyright © 2026 ChimingLu. All Rights Reserved.
+
+**未經作者書面許可，嚴禁任何形式的複製、分發、公開傳播或用於商業用途。**
+若您對本專案有商業合作或使用需求，請聯繫作者。
