@@ -10,6 +10,10 @@
 1.  **連線管理**：雖然 View Extension 具備自動啟動功能，但為了確保連線穩定性與權限正確，**強烈建議**您在畫板中手動放置 `MCPControls.StartMCPServer` 節點。
 2.  **中心化設定 (`mcp_config.json`)**：全域路徑與使用者資訊由設定檔統一管理，確保腳本、範例與測試檔案存放有序且邏輯一致。
 
+
+> [!CRITICAL]
+> **重啟 Dynamo 前注意事項**：若需關閉或重啟 Dynamo，**請務必先停止 Python Server (Ctrl+C)**。否則舊的連線會被 Python 端佔用，導致新的 Dynamo 無法綁定連接埠，產生「連線超時」或「殭屍連線」錯誤。
+
 ---
 
 ## 🏗️ 系統架構

@@ -1,0 +1,15 @@
+{
+    "description": "Creates a random cuboid using DesignScript code injected into a Number node.",
+    "content": {
+        "nodes": [
+            {
+                "id": "random_cuboid_code",
+                "name": "Number",
+                "value": "origin = Point.ByCoordinates({x}, {y}, {z});\nCuboid.ByLengths(origin, {w}, {l}, {h});",
+                "x": 400,
+                "y": 300
+            }
+        ],
+        "connectors": []
+    }
+}

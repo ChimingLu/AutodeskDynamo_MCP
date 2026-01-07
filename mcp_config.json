@@ -22,6 +22,11 @@
         "retry_attempts": 3,
         "health_check_enabled": true
     },
+    "server": {
+        "host": "127.0.0.1",
+        "port": 5050,
+        "url_path": "/mcp/"
+    },
     "deployment_info": {
         "version": "2.4",
         "last_updated": "2026-01-05",

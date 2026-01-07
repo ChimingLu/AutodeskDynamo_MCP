@@ -146,3 +146,20 @@
 
 ## 5. 故障排除規則
 - 若 `analyze_workspace` 回傳 `Warning` 或點重疊，AI 必須立即分析是否有 Port 未正確給值，並禁止在未修正邏輯的情況下重複發送相同指令。
+
+## 6. 腳本庫管理 (Script Library Management) 
+- **功能描述**：新版 MCP 支援將成功的 Dynamo 指令快照保存為腳本 (`DynamoScripts/*.json`)，以便重複使用。
+- **最佳實踐**：
+    1. **驗證後保存**：只有在 AI 確認執行成功 (無錯誤、無幽靈連線、使用者滿意) 後，才主動詢問使用者是否保存為腳本。
+    2. **模組化命名**：腳本名稱應具備描述性 (如 `grid_10x10`, `basic_cube_param`)，不包含副檔名。
+    3. **復用優先**：當使用者請求繪製標準圖形時，先使用 `get_script_library` 查詢是否有現成腳本，若有則優先使用 `load_script_from_library`，這比重新生成指令更穩定。
+    4. **參數化載入**：`load_script_from_library` 支援 `base_x` 與 `base_y` 偏移量，載入時應計算適當位置避免與現有圖形重疊。
+- **操作流程範例**：
+    ```python
+    # 1. 查詢庫存
+    scripts = mcp.get_script_library()
+    
+    # 2. 若存在，載入並執行 (偏移 500 單位以免重疊)
+    json_content = mcp.load_script_from_library("basic_house", base_x=500, base_y=0)
+    mcp.execute_dynamo_instructions(json_content)
+    ```

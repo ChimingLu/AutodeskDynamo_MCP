@@ -43,5 +43,9 @@ if (Test-Path $TargetPackageDir) {
 }
 Copy-Item $PackageSourceDir -Destination $TargetPackageDir -Recurse -Force
 
+# 4. Deploy Config
+Write-Host "`n[Deploying Config] Copying mcp_config.json..."
+Copy-Item "mcp_config.json" -Destination $TargetPackageDir -Force
+
 Write-Host "`nSUCCESS: Package deployed successfully!"
 Write-Host "You can now open Dynamo/Revit."

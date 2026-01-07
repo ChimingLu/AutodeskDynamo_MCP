@@ -8,16 +8,16 @@ url = "http://127.0.0.1:5050/mcp/"
 
 instructions = {
     "nodes": [
-        # 起點座標輸入
-        {"id": "x1", "name": "Code Block", "value": "10;", "x": -200, "y": 0},
-        {"id": "y1", "name": "Code Block", "value": "20;", "x": -200, "y": 100},
-        {"id": "z1", "name": "Code Block", "value": "30;", "x": -200, "y": 200},
+        # 起點座標輸入 (使用 Number 節點替代 Code Block)
+        {"id": "x1", "name": "Number", "value": 10, "x": -200, "y": 0},
+        {"id": "y1", "name": "Number", "value": 20, "x": -200, "y": 100},
+        {"id": "z1", "name": "Number", "value": 30, "x": -200, "y": 200},
         {"id": "p1", "name": "Point.ByCoordinates", "x": 100, "y": 100},
 
         # 終點座標輸入
-        {"id": "x2", "name": "Code Block", "value": "100;", "x": -200, "y": 400},
-        {"id": "y2", "name": "Code Block", "value": "150;", "x": -200, "y": 500},
-        {"id": "z2", "name": "Code Block", "value": "200;", "x": -200, "y": 600},
+        {"id": "x2", "name": "Number", "value": 100, "x": -200, "y": 400},
+        {"id": "y2", "name": "Number", "value": 150, "x": -200, "y": 500},
+        {"id": "z2", "name": "Number", "value": 200, "x": -200, "y": 600},
         {"id": "p2", "name": "Point.ByCoordinates", "x": 100, "y": 500},
 
         # 直線節點

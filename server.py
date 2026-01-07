@@ -5,6 +5,25 @@ import json
 import urllib.request
 import urllib.error
 import glob
+from pathlib import Path
+
+GUIDELINE_PATH = os.path.join(os.path.dirname(__file__), "MCP_GUIDELINES.md")
+QUICK_REF_PATH = os.path.join(os.path.dirname(__file__), "QUICK_REFERENCE.md")
+
+def _load_guidelines() -> tuple[str, str]:
+    """Load content of guidelines and quick reference."""
+    g_content = ""
+    q_content = ""
+    try:
+        if os.path.exists(GUIDELINE_PATH):
+            with open(GUIDELINE_PATH, "r", encoding="utf-8") as f:
+                g_content = f.read()
+        if os.path.exists(QUICK_REF_PATH):
+            with open(QUICK_REF_PATH, "r", encoding="utf-8") as f:
+                q_content = f.read()
+    except Exception as e:
+        print(f"⚠️ Warning: Failed to load guidelines: {e}")
+    return g_content, q_content
 
 # 初始化 Server
 mcp = FastMCP("BIM_Assistant")
@@ -160,11 +179,15 @@ def _check_dynamo_connection() -> tuple[bool, str]:
     Helper to verify if Dynamo listener is reachable.
     Also checks for Zombie processes if PID is available.
     """
-    url = "http://127.0.0.1:5050/mcp/"
-    payload = json.dumps({"action": "get_graph_status"})
-    
     # 從配置檔讀取超時參數，提供預設值確保向後相容
     timeout_seconds = CONFIG.get("connection", {}).get("timeout_seconds", 5)
+    
+    server_conf = CONFIG.get("server", {})
+    host = server_conf.get("host", "127.0.0.1")
+    port = server_conf.get("port", 5050)
+    
+    url = f"http://{host}:{port}/mcp/"
+    payload = json.dumps({"action": "get_graph_status"})
     
     try:
         req = urllib.request.Request(
@@ -273,11 +296,17 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
         Status message.
     """
     # 強制檢查連線
+    # 強制檢查連線
     is_ok, status_or_err = _check_dynamo_connection()
+    
+    server_conf = CONFIG.get("server", {})
+    host = server_conf.get("host", "127.0.0.1")
+    port = server_conf.get("port", 5050)
+    
     if not is_ok:
-        return f"❌ 失敗: 無法連線至 Dynamo (localhost:5050)。請確認：1. Dynamo 已開啟 2. 確定有載入 DynamoMCPListener 插件。 (錯誤: {status_or_err})"
+        return f"❌ 失敗: 無法連線至 Dynamo ({host}:{port})。請確認：1. Dynamo 已開啟 2. 確定有載入 DynamoMCPListener 插件。 (錯誤: {status_or_err})"
 
-    url = "http://127.0.0.1:5050/mcp/"
+    url = f"http://{host}:{port}/mcp/"
     
     try:
         # Validate JSON
@@ -348,7 +377,10 @@ def list_available_nodes(filter_text: str = "", search_scope: str = "default", d
     if not is_ok:
         return f"❌ 失敗: 無法連線至 Dynamo。 (錯誤: {status_or_err})"
 
-    url = "http://127.0.0.1:5050/mcp/"
+    server_conf = CONFIG.get("server", {})
+    host = server_conf.get("host", "127.0.0.1")
+    port = server_conf.get("port", 5050)
+    url = f"http://{host}:{port}/mcp/"
     payload = json.dumps({
         "action": "list_nodes", 
         "filter": filter_text,
@@ -398,7 +430,10 @@ def clear_workspace() -> str:
     if not is_ok:
         return f"❌ 失敗: 無法清空，連線已中斷。 ({status_or_err})"
 
-    url = "http://127.0.0.1:5050/mcp/"
+    server_conf = CONFIG.get("server", {})
+    host = server_conf.get("host", "127.0.0.1")
+    port = server_conf.get("port", 5050)
+    url = f"http://{host}:{port}/mcp/"
     payload = json.dumps({"action": "clear_graph"})
     
     try:
@@ -416,6 +451,37 @@ def clear_workspace() -> str:
         return f"Error clearing workspace: {str(e)}"
 
 
+
+
+# ==========================================
+# 新增工具: 規範查詢 (Guideline Enforcement)
+# ==========================================
+@mcp.tool()
+def get_mcp_guidelines() -> str:
+    """
+    Get the full content of MCP_GUIDELINES.md and QUICK_REFERENCE.md.
+    AI Agents should consult this when encountering errors or at the start of a session.
+    
+    Returns:
+        Combined string of both files.
+    """
+    g_content, q_content = _load_guidelines()
+    return f"# MCP GUIDELINES\n\n{g_content}\n\n# QUICK REFERENCE\n\n{q_content}"
+
+@mcp.prompt()
+def mcp_rules() -> str:
+    """
+    System prompt containing the core rules for interacting with Dynamo MCP.
+    """
+    g_content, q_content = _load_guidelines()
+    return f"""You are an intelligent BIM Assistant controlling Autodesk Dynamo via MCP.
+    
+CRITICAL OPERATIONAL RULES:
+{q_content}
+
+DETAILED GUIDELINES:
+{g_content}
+"""
 
 # ==========================================
 # 新增工具: 腳本庫管理 (Script Library)
@@ -562,4 +628,14 @@ if __name__ == "__main__":
     
     print("Starting FastMCP Server...")
     print("==========================================")
+    
+    # CRITICAL STARTUP WARNINGS
+    print("\n" + "!" * 50)
+    print("CRITICAL WARNING: PLEASE READ")
+    print("!" * 50)
+    print("1. 若需重啟 Dynamo，請務必先按 Ctrl+C 停止此 Server！")
+    print("   (Stop this server BEFORE closing Dynamo window)")
+    print("2. 每次對話開始前，建議使用 'get_mcp_guidelines' 複習規範。")
+    print("!" * 50 + "\n")
+    
     mcp.run(transport="sse")

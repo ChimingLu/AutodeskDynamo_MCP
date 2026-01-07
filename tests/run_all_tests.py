@@ -12,13 +12,57 @@ import time
 import json
 from pathlib import Path
 
-# 測試分類
-TEST_CATEGORIES = {
-    "connection": ["check_dynamo.py", "check_workspace.py"],
-    "node_search": ["list_nodes_test.py", "search_aqua.py", "search_clockwork.py", "search_color.py"],
-    "node_placement": ["place_aqua.py", "draw_line.py", "draw_line_3d.py"],
-    "integration": ["performance_test.py"],
+# 測試分類配置
+# 結構: { "category_name": { "scripts": [...], "requires_dynamo": bool } }
+TEST_CONFIG = {
+    "connection": {
+        "scripts": ["check_dynamo.py", "check_workspace.py"],
+        "requires_dynamo": True
+    },
+    "node_search": {
+        "scripts": ["list_nodes_test.py", "search_aqua.py", "search_clockwork.py", "search_color.py"],
+        "requires_dynamo": True
+    },
+    "node_placement": {
+        "scripts": ["place_aqua.py", "draw_line.py", "draw_line_3d.py"],
+        "requires_dynamo": True
+    },
+    "integration": {
+        "scripts": ["performance_test.py"],
+        "requires_dynamo": True
+    },
+    "unit_tests": {
+        "scripts": ["test_path_info.py"], # 假設這是純單元測試
+        "requires_dynamo": False
+    }
 }
+
+def check_dynamo_process() -> bool:
+    """檢查 DynamoSandbox.exe 或 Revit.exe 是否正在執行"""
+    try:
+        # Check for DynamoSandbox.exe
+        output = subprocess.check_output(
+            'tasklist /FI "IMAGENAME eq DynamoSandbox.exe" /FO CSV /NH', 
+            shell=True
+        ).decode('utf-8', errors='ignore')
+        
+        # Check for Revit.exe
+        output_revit = subprocess.check_output(
+            'tasklist /FI "IMAGENAME eq Revit.exe" /FO CSV /NH', 
+            shell=True
+        ).decode('utf-8', errors='ignore')
+        
+        combined_output = output + "\n" + output_revit
+        
+        for line in combined_output.splitlines():
+            if not line.strip(): continue
+            if "DynamoSandbox.exe" in line or "Revit.exe" in line:
+                return True
+                
+        return False
+    except Exception as e:
+        print(f"⚠️ 無法檢查 Dynamo 進程: {e}")
+        return False
 
 class TestRunner:
     def __init__(self, test_dir="tests"):
@@ -26,6 +70,16 @@ class TestRunner:
         self.results = []
         self.start_time = None
         self.end_time = None
+        self.dynamo_running = False
+
+    def check_environment(self):
+        """檢查測試環境"""
+        print("正在檢查環境...")
+        self.dynamo_running = check_dynamo_process()
+        if self.dynamo_running:
+            print("✅ Dynamo/Revit 正在執行")
+        else:
+            print("⚠️ Dynamo/Revit 未執行 (部分測試將被跳過)")
 
     def run_test(self, script_path):
         """執行單個測試腳本"""
@@ -73,18 +127,37 @@ class TestRunner:
                 "error": str(e)
             }
 
-    def run_category(self, category, scripts):
+    def run_category(self, category_name, config):
         """執行特定類別的測試"""
-        print(f"\n[{category.upper()}]")
-        category_results = []
+        print(f"\n[{category_name.upper()}]")
         
-        for script_name in scripts:
+        # 檢查是否需要跳過
+        if config["requires_dynamo"] and not self.dynamo_running:
+            print(f"  ⚠️ 跳過此類別 (需要 Dynamo 執行)")
+            skipped_results = []
+            for script_name in config["scripts"]:
+                skipped_results.append({
+                    "script": script_name,
+                    "status": "SKIP",
+                    "duration": 0,
+                    "error": "Dynamo 未執行"
+                })
+            return skipped_results
+
+        category_results = []
+        for script_name in config["scripts"]:
             script_path = self.test_dir / script_name
             if script_path.exists():
                 result = self.run_test(script_path)
                 category_results.append(result)
             else:
                 print(f"  ⚠️ 跳過: {script_name} (檔案不存在)")
+                category_results.append({
+                    "script": script_name,
+                    "status": "SKIP",
+                    "duration": 0,
+                    "error": "檔案不存在"
+                })
         
         return category_results
 
@@ -95,6 +168,7 @@ class TestRunner:
         failed = sum(1 for r in self.results if r["status"] == "FAIL")
         timeout = sum(1 for r in self.results if r["status"] == "TIMEOUT")
         error = sum(1 for r in self.results if r["status"] == "ERROR")
+        skipped = sum(1 for r in self.results if r["status"] == "SKIP")
         
         total_time = self.end_time - self.start_time
         
@@ -105,13 +179,20 @@ class TestRunner:
         print(f"總測試數量: {total}")
         print(f"  ✅ 通過: {passed}")
         print(f"  ❌ 失敗: {failed}")
+        print(f"  ⚠️ 跳過: {skipped}")
         print(f"  ⏱️ 超時: {timeout}")
         print(f"  💥 錯誤: {error}")
-        print(f"\n成功率: {(passed/total*100):.1f}%" if total > 0 else "N/A")
+        
+        effective_total = total - skipped
+        if effective_total > 0:
+            print(f"\n執行成功率: {(passed/effective_total*100):.1f}% (排除跳過項目)")
+        else:
+            print("\n沒有實際執行的測試")
+            
         print("=" * 60)
         
         # 失敗測試詳細資訊
-        failures = [r for r in self.results if r["status"] != "PASS"]
+        failures = [r for r in self.results if r["status"] in ["FAIL", "TIMEOUT", "ERROR"]]
         if failures:
             print("\n失敗測試詳情:")
             for f in failures:
@@ -129,9 +210,13 @@ class TestRunner:
                     "total": total,
                     "passed": passed,
                     "failed": failed,
+                    "skipped": skipped,
                     "timeout": timeout,
                     "error": error,
-                    "duration_seconds": total_time
+                    "duration_seconds": total_time,
+                    "environment": {
+                        "dynamo_running": self.dynamo_running
+                    }
                 },
                 "results": self.results
             }, f, indent=2, ensure_ascii=False)
@@ -145,19 +230,20 @@ class TestRunner:
         print("=" * 60)
         
         self.start_time = time.time()
+        self.check_environment()
         
         if category_filter:
-            if category_filter in TEST_CATEGORIES:
-                results = self.run_category(category_filter, TEST_CATEGORIES[category_filter])
+            if category_filter in TEST_CONFIG:
+                results = self.run_category(category_filter, TEST_CONFIG[category_filter])
                 self.results.extend(results)
             else:
                 print(f"❌ 未知的測試類別: {category_filter}")
-                print(f"可用類別: {', '.join(TEST_CATEGORIES.keys())}")
+                print(f"可用類別: {', '.join(TEST_CONFIG.keys())}")
                 return
         else:
             # 執行所有類別
-            for category, scripts in TEST_CATEGORIES.items():
-                results = self.run_category(category, scripts)
+            for category_name, config in TEST_CONFIG.items():
+                results = self.run_category(category_name, config)
                 self.results.extend(results)
         
         self.end_time = time.time()
