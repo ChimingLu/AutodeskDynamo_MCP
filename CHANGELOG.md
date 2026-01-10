@@ -26,7 +26,7 @@
 
 ### 📝 文檔更新
 - **[QUICK_REFERENCE.md]**: 新增幽靈連線處理 SOP 與重啟序列。
-- **[MCP_GUIDELINES.md]**: 納入 SessionID 變動感知與 Ghost Listener 判定規範。
+- **[GEMINI.md]**: 納入 SessionID 變動感知與 Ghost Listener 判定規範。
 
 ---
 

@@ -46,6 +46,6 @@
 ---
 
 ## 📁 參考文件
-- **完整規範**: [MCP_GUIDELINES.md](file:///d:/AI/An/AutodeskDynamo_MCP/MCP_GUIDELINES.md)
+- **完整規範**: [GEMINI.md](file:///d:/AI/An/AutodeskDynamo_MCP/GEMINI.md)
 - **節點庫清單**: `DynamoViewExtension/common_nodes.json`
 - **實作細節**: `DynamoViewExtension/src/SimpleHttpServer.cs` (強制奪取邏輯)

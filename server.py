@@ -7,7 +7,7 @@ import urllib.error
 import glob
 from pathlib import Path
 
-GUIDELINE_PATH = os.path.join(os.path.dirname(__file__), "MCP_GUIDELINES.md")
+GUIDELINE_PATH = os.path.join(os.path.dirname(__file__), "GEMINI.md")
 QUICK_REF_PATH = os.path.join(os.path.dirname(__file__), "QUICK_REFERENCE.md")
 
 def _load_guidelines() -> tuple[str, str]:
@@ -459,7 +459,7 @@ def clear_workspace() -> str:
 @mcp.tool()
 def get_mcp_guidelines() -> str:
     """
-    Get the full content of MCP_GUIDELINES.md and QUICK_REFERENCE.md.
+    Get the full content of GEMINI.md and QUICK_REFERENCE.md.
     AI Agents should consult this when encountering errors or at the start of a session.
     
     Returns:
