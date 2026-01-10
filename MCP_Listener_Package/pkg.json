@@ -9,7 +9,7 @@
     "ai"
   ],
   "dependencies": [],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "node_libraries": [
     "DynamoMCPListener, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
   ]

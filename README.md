@@ -121,10 +121,18 @@ print(f"狀態: {health['status']}, 運行時間: {health['uptimeSeconds']}秒")
 
 ---
 
-## ⚖️ 權利聲明 (Copyright)
-本專案目前為 **私有專案 (Private)**，僅供受邀者進行測試與評估。
+## ⚖️ 權利聲明 (License)
 
-Copyright © 2026 ChimingLu. All Rights Reserved.
+Copyright 2026 ChimingLu.
 
-**未經作者書面許可，嚴禁任何形式的複製、分發、公開傳播或用於商業用途。**
-若您對本專案有商業合作或使用需求，請聯繫作者。
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
