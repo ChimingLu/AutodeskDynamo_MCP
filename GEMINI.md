@@ -1,5 +1,42 @@
 為了確保 AI 在控制 Autodesk Dynamo 時不發生低級錯誤（如點座標重疊、誤用 2D 節點等），特訂定此規範。**AI 在執行任何繪圖指令前必須檢查此規範。**
 
+
+## 📂 專案結構
+
+- `mcp_config.json`: **[核心設定]** 管理使用者、路徑規則與部屬步驟。
+- `server.py`: 主要的 MCP 伺服器，定義 AI 調用的工具集 (Tools)。
+- `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
+- `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。
+- `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。
+- `examples/`: 提供給開發者的基準範例。
+- `deploy.ps1`: **[一鍵部署]** 編譯並安裝插件至 Dynamo 套件路徑。
+- **`GEMINI.md`**: **[AI 必讀]** 完整的操作規範與節點創建方法。
+- **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例與故障排除指南。
+
+## 🧠 AI 協作指令
+
+此專案採用「上下文工程 (Context Engineering)」策略，區分 **高階規則 (Rules)** 與 **具體規格 (Specs)**。AI 助手必須遵循以下指令與行為模式：
+
+### 1. 指令定義與行為模式
+| 指令 | 行為規範 (AI 必須執行的動作) |
+| :--- | :--- |
+| **`/lessons`** | **智慧提煉**：從成功對話中提取「高階規則或避坑經驗」，並以 **Append (追加)** 方式寫入此 `GEMINI.md` 末尾。嚴禁只記代碼細節。 |
+| **`/domain`** | **SOP 轉換**：將成功的對話工作流程轉換為標準 SOP 格式的 `domain/*.md` 檔案。步驟：(1) 確認對象 (2) 提取工具和步驟 (3) 用 YAML frontmatter + MD 格式撰寫 (4) 儲存至 `domain/` (5) 更新觸發表。 |
+| **`/review`** | **憲法審計**：檢查 `GEMINI.md` 是否過於肥大。當規則超過 100 行，提議將具體的「規格或案例」遷移至 `domain/` 或 `docs/`。 |
+| **`/explain`** | **視覺化解構**：解釋複雜概念時，**強制使用** Markdown 表格、ASCII 流程圖或 Mermaid 圖表。嚴禁提供冗長的文字牆。 |
+
+
+### 2. 核心行為義務 (不需要指令即可觸發)
+- **自動預檢 (Auto-Precheck)**：在開始任何任務前，我 **必須主動** 檢索 `domain/`、`scripts/` 以及 `GEMINI.md`。如果已有先前成功的策略，必須優先參考，嚴禁重複撰寫類似邏輯的 JSON、PY。
+- **規格驅動 (SDD)**：重大變更前應先更新 `domain/` 中的 MD 文件（規格），而非直接修改程式碼。
+
+### 📂 腳本與知識組織規範
+- **`domain/`**: 存放長期業務邏輯、法規分析策略、成功的 AI 協作經驗 (MD 格式)。
+- **`DynamoScripts/`**: 存放穩定的底層核心 MCP 工具 (JSON)。
+- **`examples/`**: 存放參數化、可重複調用的穩定工作流腳本(PY)。
+- **`tests/`**: 存放任務導向、一次性或除錯用的雜餘腳本。
+
+
 ## 0. 啟動與狀態檢查 (Startup & Status Check)
 - **強制執行分析**：AI 在進行任何實質作業（放置節點、連線、載入腳本）前，**必須**先執行 `analyze_workspace` 工具。
 - **幽靈連線 (Ghost Listener) 偵測法**：
@@ -14,6 +51,11 @@
     - `Workspace Name`: 當前檔案名稱。
     - `Node Count`: 當前節點數。
     - `Session State`: 確認 Session ID 是否延續或為新實例。
+
+
+
+
+
 
 ## 1. 節點創建的正確方法 (Critical: Node Creation Method)
 
