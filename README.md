@@ -40,6 +40,9 @@
 - `server.py`: 主要的 MCP 伺服器，定義 AI 調用的工具集 (Tools)。
 - `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
 - `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。
+- **`domain/`**: **[SOP 知識庫]** 標準操作程序與故障排除指南。
+  - `startup_checklist.md`: 啟動檢查清單（AI 初始化必讀）
+  - `troubleshooting.md`: 完整故障排除流程
 - `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。
 - `examples/`: 提供給開發者的基準範例。
 - `deploy.ps1`: **[一鍵部署]** 編譯並安裝插件至 Dynamo 套件路徑。

@@ -42,7 +42,13 @@ def run():
                     try:
                         new_value = original_value.format(**coords)
                         node["value"] = new_value
-                        print(f"Injected code into node '{node.get('id')}':\n{new_value}")
+                        
+                        # Generate a unique ID to allow multiple lines
+                        import uuid
+                        new_id = str(uuid.uuid4())
+                        node["id"] = new_id
+                        
+                        print(f"Injected code into new node '{new_id}':\n{new_value}")
                     except KeyError as e:
                         print(f"Warning: Could not format string. Missing key: {e}")
         
