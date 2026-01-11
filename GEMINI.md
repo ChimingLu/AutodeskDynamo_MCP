@@ -212,6 +212,20 @@ AI 在執行 `/image` 指令時，曾經無法正確取得檔名 (顯示為 Home
 
 ---
 
+### 核心教訓 #7：嚴禁重複性開發與檔案亂丟
+
+**背景問題**：
+專案中出現多個功能雷同的腳本（如 `check_workspace.py`, `get_workspace_data.py` 與 `analyze_current_workspace.py` 重複），且分析產出的 JSON 檔案散落在根目錄或 `tests/` 中。
+
+**強制規範**：
+1. **禁止重複開發**：在建立新腳本前，必須檢查 `tests/` 與 `examples/`。若已有類似功能的腳本，應予以優化或合併，禁止建立 `script_v2.py`、`check_new.py` 等冗餘檔案。
+2. **產出物歸位**：
+    - **臨時測試資料**：必須存放於 `tests/temp/`。
+    - **正式分析報告/圖像**：必須存放於 `image/`。
+    - **核心工具產出**：嚴禁出現在根目錄。
+3. **根目錄定點化**：根目錄僅允許存放核心配置 (`mcp_config.json`)、服務入口 (`server.py`) 與文件 (`GEMINI.md`)。
+
+---
 
 ### 🛡️ 自我審查清單 (Pre-Flight Checklist)
 
@@ -222,7 +236,8 @@ AI 在執行 `/image` 指令時，曾經無法正確取得檔名 (顯示為 Home
 - [ ] 若涉及 3D 幾何，是否明確指定 X、Y、Z 三個參數?
 - [ ] 是否已執行 `analyze_workspace` 確認當前狀態?
 - [ ] SessionId 是否與前次一致 (避免幽靈連線)?
-- [ ] 是否有現成腳本可復用 (查詢 `get_script_library`)?
+- [ ] 是否有現成腳本可復用 (查詢 `get_script_library` 與 `tests/`)?
+- [ ] 產出物放置路徑是否符合規範 (嚴禁放根目錄)?
 
 **故障處理原則**：
 ```
