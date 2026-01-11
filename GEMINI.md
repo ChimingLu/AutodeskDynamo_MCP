@@ -26,7 +26,7 @@
 | **`/domain`** | **SOP 轉換**：將成功的對話工作流程轉換為標準 SOP 格式的 `domain/*.md` 檔案。步驟：(1) 確認對象 (2) 提取工具和步驟 (3) 用 YAML frontmatter + MD 格式撰寫 (4) 儲存至 `domain/` (5) 更新觸發表。 |
 | **`/review`** | **憲法審計**：檢查 `GEMINI.md` 是否過於肥大。當規則超過 100 行，提議將具體的「規格或案例」遷移至 `domain/` 或 `docs/`。 |
 | **`/explain`** | **視覺化解構**：解釋複雜概念時，**強制使用** Markdown 表格、ASCII 流程圖或 Mermaid 圖表。嚴禁提供冗長的文字牆。 |
-| **`/image`** | **腳本視覺化分析**：調用 gemini-3-pro-image-preview 模型，使用 Nano Banana Pro 分析使用者提供的 .dyn (JSON) 檔案，產出包含以下內容的繁體中文技術文檔與資訊圖表：(1) 📋 腳本資訊快報（用途目的、複雜難度、使用情境） (2) 📥 輸入參數表格 (3) ⚙️ 執行過程條列說明 (4) 📤 產出結果 (5) 📦 必要外掛清單 (6) 📊 Mermaid 邏輯流程圖（節點標籤必須用雙引號包裹）。所有輸出內容必須使用繁體中文（台灣工程慣用語），並將生成的圖表儲存至 `image/` 資料夾。 |
+| **`/image`** | **腳本視覺化分析**：依照 [`domain/visual_analysis_workflow.md`](domain/visual_analysis_workflow.md) 之標準流程執行。自動偵測當前工作區檔名，若未存檔則提示使用者。產出包含：(1) 技術文檔 (2) 視覺化儀表板圖片。所有產出須存至 `image/` 資料夾。 |
 
 
 ### 2. 核心行為義務 (不需要指令即可觸發)
@@ -63,6 +63,7 @@
 **相關文件**：
 - 📋 [啟動檢查清單](domain/startup_checklist.md) - 標準化 AI 初始化流程
 - 🔧 [故障排除 SOP](domain/troubleshooting.md) - 連線失敗、幽靈連線等問題解決方案
+- 🎨 [視覺化分析 SOP](domain/visual_analysis_workflow.md) - `/image` 指令的標準執行流程
 
 
 ---
@@ -196,7 +197,21 @@ json_content = mcp.load_script_from_library(
 )
 ```
 
+
 ---
+
+### 📸 核心教訓 #6：/image 指令的標準工作流
+
+**背景問題**：  
+AI 在執行 `/image` 指令時，曾經無法正確取得檔名 (顯示為 Home)，且視覺化流程未標準化。
+
+**解決方案**：
+1. **API 修正**：`DynamoViewExtension` 必須回傳 `workspace.FileName` 而非 `workspace.Name`。
+2. **標準 SOP**：參閱 [`domain/visual_analysis_workflow.md`](domain/visual_analysis_workflow.md)。
+3. **命名原則**：優先使用 `FileName` 為基準，避免使用 `Home`。
+
+---
+
 
 ### 🛡️ 自我審查清單 (Pre-Flight Checklist)
 

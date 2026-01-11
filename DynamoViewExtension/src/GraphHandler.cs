@@ -152,6 +152,7 @@ namespace DynamoMCPListener
                 var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
                 
                 result["workspaceName"] = workspace.Name;
+                result["fileName"] = workspace.FileName;
                 result["nodeCount"] = workspace.Nodes.Count();
                 result["workspaceType"] = workspace.GetType().Name;
                 result["processId"] = currentProcess.Id;
