@@ -1,5 +1,20 @@
 $ErrorActionPreference = "Stop"
 
+# ========================================
+# 步驟 0: 轉換配置檔案
+# ========================================
+Write-Host "`n[0/4] 更新配置檔案..." -ForegroundColor Cyan
+$UpdateConfigScript = Join-Path $PSScriptRoot "scripts\update_config.py"
+if (Test-Path $UpdateConfigScript) {
+    python $UpdateConfigScript
+    if ($LASTEXITCODE -ne 0) { 
+        Write-Warning "配置轉換失敗，將使用現有的 mcp_config.json"
+    }
+}
+else {
+    Write-Host "   ⚠️  未找到 update_config.py，跳過配置更新" -ForegroundColor Yellow
+}
+
 # Configuration
 $ProjectFile = "DynamoViewExtension\DynamoMCPListener.csproj"
 $PackageName = "MCP_Listener_Package"
@@ -24,12 +39,12 @@ Write-Host "Targeting Dynamo Version: $TargetVersion"
 Write-Host "Deploying to: $TargetPackageDir"
 
 # 1. Build project
-Write-Host "`n[1/3] Building Project..."
+Write-Host "`n[1/4] Building Project..."
 dotnet build $ProjectFile -c Release
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
 # 2. Copy Binaries to Package structure
-Write-Host "`n[2/3] Updating Package Binaries..."
+Write-Host "`n[2/4] Updating Package Binaries..."
 if (-not (Test-Path $PackageBinDir)) { New-Item -ItemType Directory -Path $PackageBinDir | Out-Null }
 
 # Note: AppendTargetFrameworkToOutputPath is false in csproj, so output is directly in bin/Release
@@ -37,14 +52,14 @@ $BuildOutputDir = "DynamoViewExtension\bin\Release"
 Copy-Item "$BuildOutputDir\*" -Destination $PackageBinDir -Force -Recurse
 
 # 3. Deploy to Dynamo
-Write-Host "`n[3/3] Deploying to Dynamo Packages..."
+Write-Host "`n[3/4] Deploying to Dynamo Packages..."
 if (Test-Path $TargetPackageDir) {
     Remove-Item $TargetPackageDir -Recurse -Force
 }
 Copy-Item $PackageSourceDir -Destination $TargetPackageDir -Recurse -Force
 
 # 4. Deploy Config
-Write-Host "`n[Deploying Config] Copying mcp_config.json..."
+Write-Host "`n[4/4] Deploying Config..."
 Copy-Item "mcp_config.json" -Destination $TargetPackageDir -Force
 
 Write-Host "`nSUCCESS: Package deployed successfully!"

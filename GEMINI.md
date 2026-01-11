@@ -3,7 +3,9 @@
 
 ## 📂 專案結構
 
-- `mcp_config.json`: **[核心設定]** 管理使用者、路徑規則與部屬步驟。
+- **`mcp_config.template.jsonc`**: **[配置模板]** 帶繁體中文註解的配置範本，使用者應編輯此檔案。
+- **`mcp_config.json`**: **[自動生成]** 由模板自動轉換的純 JSON 設定檔，程式讀取使用。
+- `docs/CONFIG_GUIDE.md`: **[配置指南]** 詳細說明如何修改配置與自動部署機制。
 - `server.py`: 主要的 MCP 伺服器，定義 AI 調用的工具集 (Tools)。
 - `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
 - `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。

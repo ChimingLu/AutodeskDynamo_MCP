@@ -36,16 +36,18 @@
 
 ## 📂 專案結構
 
-- `mcp_config.json`: **[核心設定]** 管理使用者、路徑規則與部屬步驟。
+- **`mcp_config.template.jsonc`**: **[配置模板]** 帶繁體中文註解的配置範本，使用者應編輯此檔案。
+- **`mcp_config.json`**: **[自動生成]** 由模板轉換的純 JSON 設定檔，程式讀取使用（請勿手動編輯）。
+- `docs/CONFIG_GUIDE.md`: **[配置指南]** 詳細說明如何修改配置檔案。
 - `server.py`: 主要的 MCP 伺服器，定義 AI 調用的工具集 (Tools)。
 - `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
 - `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。
 - **`domain/`**: **[SOP 知識庫]** 標準操作程序與故障排除指南。
   - `startup_checklist.md`: 啟動檢查清單（AI 初始化必讀）
   - `troubleshooting.md`: 完整故障排除流程
-- `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。
+- `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。**（此效用目錄被 Git 忽略，腳本不會上傳）**
 - `examples/`: 提供給開發者的基準範例。
-- `image/`: **[視覺化產出]** 存放 `/image` 指令產出的腳本分析圖表與技術文檔。
+- `image/`: **[視覺化產出]** 存放 `/image` 指令產出的腳本分析圖表與技術文檔。**（此產出目錄被 Git 忽略，圖片不會上傳）**
 - `deploy.ps1`: **[一鍵部署]** 編譯並安裝插件至 Dynamo 套件路徑。
 - **`GEMINI.md`**: **[AI 必讀]** 完整的操作規範與節點創建方法。
 - **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例與故障排除指南。
@@ -57,10 +59,16 @@
 1.  **環境需求**:
     - **.NET 8 SDK**。
     - **Revit 2024+** 或 **Dynamo Sandbox 3.x**。
-2.  **執行部署**:
+2.  **配置設定**（首次使用）:
+    - 編輯 `mcp_config.template.jsonc`，修改標記為 🔧 的項目（如使用者名稱、伺服器埠號）。
+    - 詳細說明請參考 [`docs/CONFIG_GUIDE.md`](docs/CONFIG_GUIDE.md)。
+3.  **執行部署**:
     - 完全關閉 Revit 與 Dynamo。
     - 在專案目錄執行：`.\deploy.ps1`
-    - 腳本會自動將插件安裝至您的 `%AppData%` 套件資料夾。
+    - 腳本會自動：
+      1. 將模板轉換為 `mcp_config.json`
+      2. 建置 C# 專案
+      3. 安裝插件至 `%AppData%` 套件資料夾
 
 ---
 

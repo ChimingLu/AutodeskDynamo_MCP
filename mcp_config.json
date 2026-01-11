@@ -31,17 +31,27 @@
         "version": "2.4",
         "last_updated": "2026-01-05",
         "required_steps": [
-            "1. Build DynamoViewExtension project",
-            "2. Copy bin output to Dynamo packages folder",
-            "3. Start Dynamo and ensure ViewExtension is loaded",
-            "4. Run server.py"
+            "1. Build DynamoViewExtension project (建置 C# 專案)",
+            "2. Copy bin output to Dynamo packages folder (複製至套件資料夾)",
+            "3. Start Dynamo and ensure ViewExtension is loaded (啟動 Dynamo 並確認插件載入)",
+            "4. Run server.py (啟動 MCP 伺服器)"
         ],
         "new_features": [
-            "Log rotation (10MB limit, 3 backups)",
-            "Health check endpoint (/health)",
-            "Enhanced error tracking",
-            "Configurable connection timeout"
+            "Log rotation (10MB limit, 3 backups) - 記錄檔自動輪替",
+            "Health check endpoint (/health) - 健康檢查端點",
+            "Enhanced error tracking - 強化錯誤追蹤",
+            "Configurable connection timeout - 可配置連線逾時"
         ],
         "target_platform": "Windows / Revit + Dynamo"
+    },
+    "auto_deployment": {
+        "enabled": true,
+        "target_dynamo_versions": [
+            "3.3",
+            "3.2"
+        ],
+        "backup_before_deploy": true,
+        "auto_start_server": false,
+        "verify_after_deploy": true
     }
 }
