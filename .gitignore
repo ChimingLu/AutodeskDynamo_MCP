@@ -57,8 +57,4 @@ TestResults/
 # Project Outputs & Temp Scripts
 image/*
 !image/.gitignore
-tests/*.py
-!tests/run_all_tests.py
-!tests/analyze_current_workspace.py
-tests/*.json
-tests/temp/*
+tests/
