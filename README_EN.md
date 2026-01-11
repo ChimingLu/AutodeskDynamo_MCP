@@ -1,3 +1,7 @@
+**語言 / Language:** [繁體中文](README.md) | [English](README_EN.md)
+
+---
+
 # Autodesk Dynamo MCP Integration Project
 
 This is a core integration project that connects **Autodesk Dynamo** to AI systems (such as Claude Desktop) through the **Model Context Protocol (MCP)**.

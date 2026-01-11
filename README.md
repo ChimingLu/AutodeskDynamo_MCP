@@ -1,4 +1,8 @@
-﻿# Autodesk Dynamo MCP Integration Project
+﻿**語言 / Language:** [繁體中文](README.md) | [English](README_EN.md)
+
+---
+
+# Autodesk Dynamo MCP Integration Project
 
 這是一個將 **Autodesk Dynamo** 透過 **Model Context Protocol (MCP)** 連接至 AI (如 Claude Desktop) 的核心整合專案。
 透過此系統，AI 可以直接控制 Dynamo 進行 BIM 自動化操作，實現「零干預」的自動化建模與查詢。
