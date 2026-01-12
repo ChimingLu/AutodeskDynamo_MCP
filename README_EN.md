@@ -62,7 +62,7 @@ With this system, AI can directly control Dynamo for BIM automation operations, 
 
 1.  **Environment Requirements**:
     - **.NET 8 SDK**.
-    - **Revit 2024+** or **Dynamo Sandbox 3.x**.
+    - **Revit 2025** + **Dynamo 3.3** (or compatible versions).
 2.  **Configuration Setup** (First-time Use):
     - Edit `mcp_config.template.jsonc` and modify items marked with 🔧 (such as username, server port number).
     - For detailed instructions, refer to [`docs/CONFIG_GUIDE.md`](docs/CONFIG_GUIDE.md).
@@ -124,9 +124,9 @@ print(f"Status: {health['status']}, Uptime: {health['uptimeSeconds']} seconds")
 }
 ```
 
-## 📖 Usage and Control (Claude Desktop)
+## 📖 Usage and Control (Antigravity)
 
-Add the following to `mcpServers` configuration:
+Add the following to Antigravity's MCP configuration:
 ```json
 "dynamo-mcp": {
   "command": "python",

@@ -4,7 +4,7 @@
 
 # Autodesk Dynamo MCP Integration Project
 
-這是一個將 **Autodesk Dynamo** 透過 **Model Context Protocol (MCP)** 連接至 AI (如 Claude Desktop) 的核心整合專案。
+這是一個將 **Autodesk Dynamo** 透過 **Model Context Protocol (MCP)** 連接至 AI (如 Antigravity) 的核心整合專案。
 透過此系統，AI 可以直接控制 Dynamo 進行 BIM 自動化操作，實現「零干預」的自動化建模與查詢。
 
 ---
@@ -62,7 +62,7 @@
 
 1.  **環境需求**:
     - **.NET 8 SDK**。
-    - **Revit 2024+** 或 **Dynamo Sandbox 3.x**。
+    - **Revit 2025** + **Dynamo 3.3**（或相容版本）。
 2.  **配置設定**（首次使用）:
     - 編輯 `mcp_config.template.jsonc`，修改標記為 🔧 的項目（如使用者名稱、伺服器埠號）。
     - 詳細說明請參考 [`docs/CONFIG_GUIDE.md`](docs/CONFIG_GUIDE.md)。
@@ -124,9 +124,9 @@ print(f"狀態: {health['status']}, 運行時間: {health['uptimeSeconds']}秒")
 }
 ```
 
-## 📖 使用與控制 (Claude Desktop)
+## 📖 使用與控制 (Antigravity)
 
-在 `mcpServers` 設定中加入：
+在 Antigravity 的 MCP 設定中加入：
 ```json
 "dynamo-mcp": {
   "command": "python",

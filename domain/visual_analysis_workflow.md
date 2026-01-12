@@ -62,9 +62,14 @@ graph TD
 #### 🖼️ 視覺化儀表板 (Dashboard Image)
 使用 `generate_image` 工具生成，Prompt 必須包含：
 - **風格**: Dark mode, Neon accents, Blueprint aesthetic, Engineering dashboard.
-- **規格**: **16:9 Aspect Ratio**, **2K Resolution** (High Definition).
+- **規格**: **Cinematic 16:9 Aspect Ratio, Landscape** (橫向長方形)，**2K Resolution** (High Definition).
 - **關鍵數據**: Node Count, Complexity Rating.
-- **核心視覺**: 根據腳本功能 (e.g. 樓板切割、樑柱生成) 描繪的 3D 示意圖。
+- **核心視覺**: 根據腳本功能 (e.g. 樓板切割、樑柱生成) 描繪的 3D 示意圖.
+
+**⚠️ 強制要求**：
+- 圖片必須為 **16:9 橫向長方形**（Landscape, Cinematic Format）
+- **嚴禁** 產出正方形 (1:1) 或直立式 (Portrait) 圖片
+- Prompt 中必須明確包含 `"Cinematic 16:9 aspect ratio, Landscape orientation"` 指示
 
 ---
 

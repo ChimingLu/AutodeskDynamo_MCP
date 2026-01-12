@@ -28,7 +28,7 @@
 | **`/domain`** | **SOP 轉換**：將成功的對話工作流程轉換為標準 SOP 格式的 `domain/*.md` 檔案。步驟：(1) 確認對象 (2) 提取工具和步驟 (3) 用 YAML frontmatter + MD 格式撰寫 (4) 儲存至 `domain/` (5) 更新觸發表。 |
 | **`/review`** | **憲法審計**：檢查 `GEMINI.md` 是否過於肥大。當規則超過 100 行，提議將具體的「規格或案例」遷移至 `domain/` 或 `docs/`。 |
 | **`/explain`** | **視覺化解構**：解釋複雜概念時，**強制使用** Markdown 表格、ASCII 流程圖或 Mermaid 圖表。嚴禁提供冗長的文字牆。 |
-| **`/image`** | **腳本視覺化分析**：依照 [`domain/visual_analysis_workflow.md`](domain/visual_analysis_workflow.md) 之標準流程執行。自動偵測當前工作區檔名，若未存檔則提示使用者。產出包含：(1) 技術文檔 (2) 視覺化儀表板圖片。所有產出須存至 `image/` 資料夾。 |
+| **`/image`** | **腳本視覺化分析**：依照 [`domain/visual_analysis_workflow.md`](domain/visual_analysis_workflow.md) 之標準流程執行。自動偵測當前工作區檔名，若未存檔則提示使用者。產出包含：(1) 技術文檔 (2) 視覺化儀表板圖片 (**強制 16:9 Cinematic Landscape 格式**)。所有產出須存至 `image/` 資料夾。 |
 
 
 ### 2. 核心行為義務 (不需要指令即可觸發)
@@ -227,6 +227,38 @@ AI 在執行 `/image` 指令時，曾經無法正確取得檔名 (顯示為 Home
     - **正式分析報告/圖像**：必須存放於 `image/`。
     - **核心工具產出**：嚴禁出現在根目錄。
 3. **根目錄定點化**：根目錄僅允許存放核心配置 (`mcp_config.json`)、服務入口 (`server.py`) 與文件 (`GEMINI.md`)。
+
+---
+
+---
+
+### 📦 核心教訓 #8：腳本整合與去重範例
+
+**背景問題**：  
+在 `examples/` 和 `tests/` 中發現重複的 `analyze_current_workspace.py`，違反核心教訓 #7。
+
+**整合決策**：
+| 項目 | 決定 | 理由 |
+|:---|:---|:---|
+| **保留位置** | `examples/analyze_current_workspace.py` | 屬於可重複使用的標準工具 |
+| **功能來源** | 合併 `tests/` 版本的完整錯誤處理 | 包含 JSON 解析、編碼修正、自動儲存 |
+| **刪除對象** | `tests/analyze_current_workspace.py` | 已被 `.gitignore` 屏蔽，屬臨時測試 |
+
+**改進重點**：
+1. **完整文檔字串**：說明腳本用途、功能、使用方式
+2. **雙重 JSON 解析**：處理 `\\` 轉義與 Unicode 編碼問題
+3. **視覺化輸出**：使用 emoji 標記狀態（✅ ❌ 📄 🔢 🔗）
+4. **自動建立目錄**：確保 `tests/temp/` 存在再寫入
+
+**整合後的黃金標準**：
+```python
+# examples/analyze_current_workspace.py (118 行)
+✅ 完整的 Apache 2.0 授權聲明
+✅ 詳細的 Docstring 說明
+✅ 雙重 JSON 解析機制（處理轉義與編碼）
+✅ 自動儲存至 tests/temp/workspace_analysis.json
+✅ 友善的中文輸出與錯誤訊息
+```
 
 ---
 
