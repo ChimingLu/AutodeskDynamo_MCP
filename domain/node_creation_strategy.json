@@ -1,0 +1,56 @@
+{
+    "strategies": {
+        "NATIVE_DIRECT": {
+            "description": "可直接創建，無 Overload 歧義",
+            "notes": "這類節點可以透過標準的 CreateNodeCommand 直接創建，不需要特殊處理",
+            "examples": [
+                "Line.ByStartPointEndPoint",
+                "Circle.ByCenterPointRadius",
+                "Rectangle.ByWidthLength",
+                "String",
+                "Boolean",
+                "Integer Slider"
+            ]
+        },
+        "NATIVE_WITH_OVERLOAD": {
+            "description": "需明確指定 Overload 版本（或自動推斷）",
+            "notes": "這類節點有多個版本（如 2D/3D），需要在 common_nodes.json 中定義 overloads 欄位",
+            "auto_infer": true,
+            "auto_infer_logic": "根據提供的參數數量自動選擇對應版本（如有 z 參數則選 3D）",
+            "examples": [
+                "Point.ByCoordinates",
+                "Vector.ByCoordinates"
+            ]
+        },
+        "CODE_BLOCK": {
+            "description": "Code Block 節點（用於數值輸入或複雜運算式）",
+            "notes": "Number 節點實際上會被轉換為 Code Block，可以包含 DesignScript 代碼",
+            "creation_method": "使用 'Code Block' 作為節點名稱，透過 UpdateModelValueCommand 設定 Code 屬性",
+            "examples": [
+                "Number"
+            ]
+        },
+        "PYTHON_SCRIPT": {
+            "description": "Python 腳本節點",
+            "notes": "未來實作：需要設定 script 屬性",
+            "node_type": "PythonScript",
+            "requires_code": true,
+            "status": "planned"
+        },
+        "CUSTOM_NODE": {
+            "description": "自訂節點 (.dyf)",
+            "notes": "未來實作：需要使用 GUID 作為創建名稱",
+            "node_type": "CustomNodeInstance",
+            "requires_guid": true,
+            "status": "planned"
+        },
+        "ZERO_TOUCH": {
+            "description": "Zero-Touch DLL 節點",
+            "notes": "未來實作：需要使用完整的 FullName（含命名空間）",
+            "requires_full_name": true,
+            "status": "planned"
+        }
+    },
+    "fallback_strategy": "CODE_BLOCK",
+    "fallback_notes": "當無法確定節點類型或創建失敗時，回退為 Code Block 策略"
+}

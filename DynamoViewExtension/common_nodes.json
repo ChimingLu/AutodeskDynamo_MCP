@@ -2,432 +2,58 @@
     {
         "name": "Point.ByCoordinates",
         "fullName": "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double",
-        "description": "Creates a Point given 3 Cartesian coordinates",
+        "creationStrategy": "NATIVE_WITH_OVERLOAD",
+        "overloads": [
+            {
+                "id": "2D",
+                "fullName": "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double",
+                "inputs": [
+                    "x",
+                    "y"
+                ]
+            },
+            {
+                "id": "3D",
+                "fullName": "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double",
+                "inputs": [
+                    "x",
+                    "y",
+                    "z"
+                ]
+            }
+        ],
         "inputs": [
             "x",
             "y",
             "z"
-        ],
-        "outputs": [
-            "Point"
         ]
     },
     {
-        "name": "Line.ByStartPointEndPoint",
-        "fullName": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint",
-        "description": "Creates a straight Line between two input Points",
-        "inputs": [
-            "startPoint",
-            "endPoint"
-        ],
-        "outputs": [
-            "Line"
-        ]
-    },
-    {
-        "name": "Circle.ByCenterPointRadius",
-        "fullName": "Autodesk.DesignScript.Geometry.Circle.ByCenterPointRadius",
-        "description": "Creates a Circle with a center point and radius",
+        "name": "Sphere.ByCenterPointRadius",
+        "fullName": "Autodesk.DesignScript.Geometry.Sphere.ByCenterPointRadius@Autodesk.DesignScript.Geometry.Point,double",
+        "creationStrategy": "NATIVE_DIRECT",
         "inputs": [
             "centerPoint",
             "radius"
-        ],
-        "outputs": [
-            "Circle"
         ]
     },
     {
-        "name": "Rectangle.ByWidthLength",
-        "fullName": "Autodesk.DesignScript.Geometry.Rectangle.ByWidthLength",
-        "description": "Creates a Rectangle centered at the origin (or input Plane) with width and length",
+        "name": "Cuboid.ByLengths",
+        "fullName": "Autodesk.DesignScript.Geometry.Cuboid.ByLengths@double,double,double",
+        "creationStrategy": "NATIVE_DIRECT",
         "inputs": [
-            "plane",
             "width",
-            "length"
-        ],
-        "outputs": [
-            "Rectangle"
+            "length",
+            "height"
         ]
     },
     {
-        "name": "Vector.ByCoordinates",
-        "fullName": "Autodesk.DesignScript.Geometry.Vector.ByCoordinates",
-        "description": "Creates a Vector from 3 coordinates",
+        "name": "Solid.Difference",
+        "fullName": "Autodesk.DesignScript.Geometry.Solid.Difference@Autodesk.DesignScript.Geometry.Solid,Autodesk.DesignScript.Geometry.Solid",
+        "creationStrategy": "NATIVE_DIRECT",
         "inputs": [
-            "x",
-            "y",
-            "z"
-        ],
-        "outputs": [
-            "Vector"
-        ]
-    },
-    {
-        "name": "Number",
-        "fullName": "Core.Input.Basic.DoubleInput",
-        "description": "Creates a number",
-        "inputs": [],
-        "outputs": [
-            "double"
-        ]
-    },
-    {
-        "name": "Integer Slider",
-        "fullName": "Core.Input.Basic.IntegerSlider",
-        "description": "Creates an integer slider",
-        "inputs": [],
-        "outputs": [
-            "int"
-        ]
-    },
-    {
-        "name": "String",
-        "fullName": "Core.Input.Basic.StringInput",
-        "description": "Creates a string",
-        "inputs": [],
-        "outputs": [
-            "string"
-        ]
-    },
-    {
-        "name": "Boolean",
-        "fullName": "Core.Input.Basic.Boolean",
-        "description": "Selection between True and False",
-        "inputs": [],
-        "outputs": [
-            "bool"
-        ]
-    },
-    {
-        "name": "List.Create",
-        "fullName": "Core.List.Create",
-        "description": "Makes a new list out of the given inputs",
-        "inputs": [
-            "item0"
-        ],
-        "outputs": [
-            "list"
-        ]
-    },
-    {
-        "name": "Math.RemapRange",
-        "fullName": "DSCore.Math.RemapRange",
-        "description": "Remaps a list of numbers from one range to another",
-        "inputs": [
-            "numbers",
-            "newMin",
-            "newMax"
-        ],
-        "outputs": [
-            "list"
-        ]
-    },
-    {
-        "name": "Wall.ByCurveAndHeight",
-        "fullName": "Revit.Elements.Wall.ByCurveAndHeight",
-        "description": "Creates a Wall from a guiding Curve, Height, Level, and WallType",
-        "inputs": [
-            "curve",
-            "height",
-            "level",
-            "wallType"
-        ],
-        "outputs": [
-            "Wall"
-        ]
-    },
-    {
-        "name": "Element.GetParameterValueByName",
-        "fullName": "Revit.Elements.Element.GetParameterValueByName",
-        "description": "Gets the value of a parameter from an element",
-        "inputs": [
-            "element",
-            "parameterName"
-        ],
-        "outputs": [
-            "var"
-        ]
-    },
-    {
-        "name": "Element.SetParameterByName",
-        "fullName": "Revit.Elements.Element.SetParameterByName",
-        "description": "Sets a parameter value for an element",
-        "inputs": [
-            "element",
-            "parameterName",
-            "value"
-        ],
-        "outputs": [
-            "element"
-        ]
-    },
-    {
-        "name": "Select Model Element",
-        "fullName": "Dynamo.Nodes.DSModelElementSelection",
-        "description": "Selects a model element from the Revit document",
-        "inputs": [],
-        "outputs": [
-            "Element"
-        ]
-    },
-    {
-        "name": "Passthrough",
-        "fullName": "Clockwork.Core.Sequence.Passthrough",
-        "description": "Ensures a sequential order of execution within a Dynamo graph. Returns the passThrough input only after the waitFor input has been evaluated.",
-        "inputs": [
-            "passThrough",
-            "waitFor"
-        ],
-        "outputs": [
-            "passThrough"
-        ]
-    },
-    {
-        "name": "Logic.If",
-        "fullName": "DSCoreNodes.DSCore.Logic.If",
-        "description": "Returns one of two inputs based on a boolean value.",
-        "inputs": [
-            "test",
-            "true",
-            "false"
-        ],
-        "outputs": [
-            "result"
-        ]
-    },
-    {
-        "name": "List.FilterByBoolMask",
-        "fullName": "DSCoreNodes.DSCore.List.FilterByBoolMask",
-        "description": "Filters a list by a boolean mask.",
-        "inputs": [
-            "list",
-            "mask"
-        ],
-        "outputs": [
-            "in",
-            "out"
-        ]
-    },
-    {
-        "name": "IfThenElse",
-        "fullName": "Clockwork.Core.Logic.IfThenElse",
-        "description": "Clockwork's IfThenElse node. Returns the true input if the test is true, otherwise returns the false input.",
-        "inputs": [
-            "test",
-            "true",
-            "false"
-        ],
-        "outputs": [
-            "result"
-        ]
-    },
-    {
-        "name": "Gate",
-        "fullName": "Clockwork.Core.Logic.Gate",
-        "description": "Clockwork's Gate node. Controls the flow of data based on a boolean toggle.",
-        "inputs": [
-            "data",
-            "open"
-        ],
-        "outputs": [
-            "data"
-        ]
-    },
-    {
-        "name": "Color.Aqua",
-        "fullName": "Color.Aqua",
-        "description": "Clockwork's Color.Aqua node. Returns the color aqua.",
-        "inputs": [],
-        "outputs": [
-            "Color"
-        ]
-    },
-    {
-        "name": "ScopeIf",
-        "fullName": "Core.Logic.ScopeIf",
-        "description": "Conditional execution node that only evaluates the necessary branch. Good for performance.",
-        "inputs": [
-            "test",
-            "true",
-            "false"
-        ],
-        "outputs": [
-            "result"
-        ]
-    },
-    {
-        "name": "List.Flatten",
-        "fullName": "DSCoreNodes.DSCore.List.Flatten",
-        "description": "Flattens a nested list by a specified amount.",
-        "inputs": [
-            "list",
-            "amount"
-        ],
-        "outputs": [
-            "list"
-        ]
-    },
-    {
-        "name": "List.Map",
-        "fullName": "DSCoreNodes.DSCore.List.Map",
-        "description": "Applies a function to each item in a list.",
-        "inputs": [
-            "list",
-            "f"
-        ],
-        "outputs": [
-            "list"
-        ]
-    },
-    {
-        "name": "List.Combine",
-        "fullName": "DSCoreNodes.DSCore.List.Combine",
-        "description": "Applies a function to multiple lists element-wise.",
-        "inputs": [
-            "f",
-            "list1",
-            "list2"
-        ],
-        "outputs": [
-            "list"
-        ]
-    },
-    {
-        "name": "List.Transpose",
-        "fullName": "DSCoreNodes.DSCore.List.Transpose",
-        "description": "Swaps rows and columns in a list of lists.",
-        "inputs": [
-            "lists"
-        ],
-        "outputs": [
-            "lists"
-        ]
-    },
-    {
-        "name": "List.Chop",
-        "fullName": "DSCoreNodes.DSCore.List.Chop",
-        "description": "Chops a list into sublists of a specified length.",
-        "inputs": [
-            "list",
-            "lengths"
-        ],
-        "outputs": [
-            "lists"
-        ]
-    },
-    {
-        "name": "Logic.And",
-        "fullName": "DSCoreNodes.DSCore.Logic.And",
-        "description": "Returns true if both inputs are true.",
-        "inputs": [
-            "a",
-            "b"
-        ],
-        "outputs": [
-            "bool"
-        ]
-    },
-    {
-        "name": "Logic.Or",
-        "fullName": "DSCoreNodes.DSCore.Logic.Or",
-        "description": "Returns true if either input is true.",
-        "inputs": [
-            "a",
-            "b"
-        ],
-        "outputs": [
-            "bool"
-        ]
-    },
-    {
-        "name": "Logic.Not",
-        "fullName": "DSCoreNodes.DSCore.Logic.Not",
-        "description": "Inverts a boolean value.",
-        "inputs": [
-            "bool"
-        ],
-        "outputs": [
-            "bool"
-        ]
-    },
-    {
-        "name": "List.Count",
-        "fullName": "DSCoreNodes.DSCore.List.Count",
-        "description": "Returns the number of items in a list.",
-        "inputs": [
-            "list"
-        ],
-        "outputs": [
-            "int"
-        ]
-    },
-    {
-        "name": "List.FirstItem",
-        "fullName": "DSCoreNodes.DSCore.List.FirstItem",
-        "description": "Returns the first item in a list.",
-        "inputs": [
-            "list"
-        ],
-        "outputs": [
-            "item"
-        ]
-    },
-    {
-        "name": "List.LastItem",
-        "fullName": "DSCoreNodes.DSCore.List.LastItem",
-        "description": "Returns the last item in a list.",
-        "inputs": [
-            "list"
-        ],
-        "outputs": [
-            "item"
-        ]
-    },
-    {
-        "name": "List.GetItemAtIndex",
-        "fullName": "DSCoreNodes.DSCore.List.GetItemAtIndex",
-        "description": "Returns the item at the specified index.",
-        "inputs": [
-            "list",
-            "index"
-        ],
-        "outputs": [
-            "item"
-        ]
-    },
-    {
-        "name": "Dictionary.ByKeysValues",
-        "fullName": "DesignScriptBuiltin.DesignScript.Builtin.Dictionary.ByKeysValues",
-        "description": "Creates a dictionary with the specified keys and values.",
-        "inputs": [
-            "keys",
-            "values"
-        ],
-        "outputs": [
-            "dictionary"
-        ]
-    },
-    {
-        "name": "Dictionary.ValueAtKey",
-        "fullName": "DesignScriptBuiltin.DesignScript.Builtin.Dictionary.ValueAtKey",
-        "description": "Returns the value associated with the specified key.",
-        "inputs": [
-            "dictionary",
-            "key"
-        ],
-        "outputs": [
-            "value"
-        ]
-    },
-    {
-        "name": "Dictionary.Keys",
-        "fullName": "DesignScriptBuiltin.DesignScript.Builtin.Dictionary.Keys",
-        "description": "Returns the keys in the dictionary.",
-        "inputs": [
-            "dictionary"
-        ],
-        "outputs": [
-            "keys"
+            "solid",
+            "other"
         ]
     }
 ]

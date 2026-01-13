@@ -1,0 +1,52 @@
+{
+    "description": "測試明確指定 3D Overload 的點創建",
+    "content": {
+        "nodes": [
+            {
+                "id": "p1",
+                "name": "Point.ByCoordinates",
+                "overload": "3D",
+                "params": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 100
+                },
+                "x": 300,
+                "y": 300
+            },
+            {
+                "id": "p2",
+                "name": "Point.ByCoordinates",
+                "overload": "3D",
+                "params": {
+                    "x": 100,
+                    "y": 0,
+                    "z": 0
+                },
+                "x": 300,
+                "y": 400
+            },
+            {
+                "id": "line",
+                "name": "Number",
+                "value": "Line.ByStartPointEndPoint(p1, p2);",
+                "x": 600,
+                "y": 350
+            }
+        ],
+        "connectors": [
+            {
+                "from": "p1",
+                "to": "line",
+                "fromPort": 0,
+                "toPort": 0
+            },
+            {
+                "from": "p2",
+                "to": "line",
+                "fromPort": 0,
+                "toPort": 1
+            }
+        ]
+    }
+}

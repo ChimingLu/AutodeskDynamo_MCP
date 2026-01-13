@@ -294,3 +294,75 @@ THEN 停止重複嘗試
 - 節點簽名定義：`DynamoViewExtension/common_nodes.json`
 - 腳本庫目錄：`DynamoScripts/*.json`
 - 快速參考：`QUICK_REFERENCE.md`
+
+---
+
+### 🔧 核心教訓 #9：原生節點自動擴展的三大支柱
+
+> **最後更新**: 2026-01-13 20:33 (GMT+8)  
+> **提煉來源**: 成功實現 Cuboid + Sphere + Solid.Difference 完整布林運算
+
+**背景問題**：  
+嘗試創建帶參數的原生節點（如 `Cuboid.ByLengths`）時，輔助 Number 節點未生成或連線失敗。
+
+#### 支柱 1：跨語言 ID 映射機制 (ID Mapping)
+
+**問題根源**：Python 端使用字串 ID（`"cube_width_123"`），C# 端需要 GUID。
+
+**解決方案**：在 `GraphHandler.cs` 維護 `Dictionary<string, Guid>` 映射表。
+
+**實作檢查點**：
+- ✅ 創建節點時記錄：`_nodeIdMap[stringId] = dynamoGuid`
+- ✅ 創建連線時查詢：`_nodeIdMap.TryGetValue(fromId, out guid)`
+- ✅ 清空工作區時重置：`_nodeIdMap.Clear()`
+
+#### 支柱 2：節點識別的優先順序 (Priority Matching)
+
+**問題根源**：當 `nodeName == "Number"` 時，若先查詢 metadata 會導致錯誤解析。
+
+**黃金規則**：
+| 順序 | 檢查對象 | 處理方式 |
+|:---:|:---|:---|
+| 1️⃣ | `"Number"` 或 `"Code Block"` | 立即創建 Code Block 並 `return` |
+| 2️⃣ | 原生節點（有 metadata） | 查詢 `_commonNodesCache` 解析 fullName |
+| 3️⃣ | 其他節點 | 使用 `nodeName` 直接創建 |
+
+**反模式**：絕對不可先查 metadata 再判斷是否為 Code Block！
+
+#### 支柱 3：Debug 日誌與錯誤處理 (Logging)
+
+**致命錯誤**：空的 `catch {}` 區塊會靜默吞掉關鍵錯誤。
+
+**強制規範**：
+```csharp
+catch (Exception ex) {
+    MCPLogger.Error($"[Function] 錯誤描述: {ex.Message}");
+    MCPLogger.Error($"StackTrace: {ex.StackTrace}");
+}
+```
+
+**關鍵日誌點**：
+- 節點創建開始 / 完成
+- ID 映射記錄
+- 連線創建的每個階段（Begin / End / Complete）
+- GUID 解析結果
+
+---
+
+**自我審查清單 (原生節點自動擴展)**：
+
+執行帶參數的原生節點創建前，AI 必須檢查：
+
+- [ ] `server.py` 的自動擴展邏輯是否生成輔助節點？
+- [ ] 輔助節點是否繼承父節點的 `preview` 屬性？
+- [ ] `GraphHandler.cs` 是否維護 ID 映射表？
+- [ ] `CreateNode` 是否優先識別 `"Number"` 節點？
+- [ ] `CreateConnection` 是否有完整的 Debug 日誌？
+- [ ] 所有 `catch` 區塊是否都記錄了錯誤訊息？
+
+**故障排查順序**：
+1. 檢查 Python 端 Debug 輸出，確認輔助節點已生成
+2. 檢查 C# 日誌，確認 ID 映射是否建立
+3. 檢查連線創建日誌，確認 GUID 解析成功
+4. 若仍失敗，檢查 `common_nodes.json` 的埠位定義是否準確
+

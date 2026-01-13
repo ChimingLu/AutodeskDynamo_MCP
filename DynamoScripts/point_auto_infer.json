@@ -1,0 +1,36 @@
+{
+    "description": "測試自動推斷 Overload：有 z 參數自動選 3D，無 z 參數選 2D",
+    "content": {
+        "nodes": [
+            {
+                "id": "p3d",
+                "name": "Point.ByCoordinates",
+                "params": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 100
+                },
+                "x": 300,
+                "y": 300
+            },
+            {
+                "id": "p2d",
+                "name": "Point.ByCoordinates",
+                "params": {
+                    "x": 100,
+                    "y": 100
+                },
+                "x": 300,
+                "y": 400
+            },
+            {
+                "id": "info",
+                "name": "String",
+                "value": "p3d: 自動推斷為 3D (有 z)\np2d: 自動推斷為 2D (無 z)",
+                "x": 600,
+                "y": 350
+            }
+        ],
+        "connectors": []
+    }
+}

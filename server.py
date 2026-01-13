@@ -65,6 +65,88 @@ _last_known_state = {
     "timestamp": 0
 }
 
+# ==========================================
+#  節點元數據快取與路由邏輯
+# ==========================================
+
+# 節點元數據快取（從 common_nodes.json 載入）
+_common_nodes_metadata = None
+
+def _load_common_nodes_metadata() -> dict:
+    """
+    從 DynamoViewExtension/common_nodes.json 載入節點元數據
+    包含 Overload 定義與創建策略
+    """
+    global _common_nodes_metadata
+    
+    if _common_nodes_metadata is not None:
+        return _common_nodes_metadata
+    
+    try:
+        metadata_path = os.path.join(
+            os.path.dirname(__file__),
+            "DynamoViewExtension",
+            "common_nodes.json"
+        )
+        
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            nodes_list = json.load(f)
+        
+        # 轉換為字典格式，以 name 為 key 方便查詢
+        _common_nodes_metadata = {}
+        for node in nodes_list:
+            _common_nodes_metadata[node["name"]] = node
+        
+        print(f"✅ 已載入 {len(_common_nodes_metadata)} 個節點元數據")
+        return _common_nodes_metadata
+        
+    except Exception as e:
+        print(f"⚠️ 無法載入節點元數據: {e}")
+        return {}
+
+def infer_overload_from_params(node_name: str, params: dict) -> str:
+    """
+    根據參數自動推斷 Overload 版本
+    
+    Args:
+        node_name: 節點名稱（如 "Point.ByCoordinates"）
+        params: 參數字典（如 {"x": 0, "y": 0, "z": 100}）
+    
+    Returns:
+        Overload ID（如 "3D"），若無法推斷則回傳 None
+    """
+    if node_name == "Point.ByCoordinates":
+        return "3D" if "z" in params else "2D"
+    elif node_name == "Vector.ByCoordinates":
+        return "3D" if "z" in params else "2D"
+    
+    return None
+
+def route_node_creation(node_spec: dict) -> dict:
+    """
+    智慧路由：根據節點類型選擇最佳創建策略
+    """
+    node_name = node_spec.get("name", "")
+    metadata = _load_common_nodes_metadata()
+    
+    # 從元數據查詢節點資訊
+    node_info = metadata.get(node_name, {})
+    strategy = node_info.get("creationStrategy", "NATIVE_DIRECT")
+    
+    # 如果是 NATIVE_WITH_OVERLOAD 策略
+    if strategy == "NATIVE_WITH_OVERLOAD":
+        # 使用明確指定的 Overload，或自動推斷
+        if "overload" not in node_spec:
+            params = node_spec.get("params", {})
+            inferred = infer_overload_from_params(node_name, params)
+            if inferred:
+                node_spec["overload"] = inferred
+                print(f"🔍 自動推斷 {node_name} 使用 Overload: {inferred}")
+    
+    # 標記策略
+    node_spec["_strategy"] = strategy
+    return node_spec
+
 def _get_system_dynamo_processes(force_refresh: bool = False) -> list[int]:
     """
     Get list of PIDs for DynamoSandbox.exe and Revit.exe
@@ -329,15 +411,74 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
         except json.JSONDecodeError:
             return "Error: Invalid JSON format."
 
-        # Apply offsets
-        if base_x != 0 or base_y != 0:
-            if "nodes" in json_data:
-                for node in json_data["nodes"]:
-                    if "x" in node:
-                        node["x"] = float(node["x"]) + base_x
-                    if "y" in node:
-                        node["y"] = float(node["y"]) + base_y
-            instructions = json.dumps(json_data)
+        # 1. 智慧節點路由與自動擴展
+        expanded_nodes = []
+        expanded_connectors = json_data.get("connectors", [])
+        
+        if "nodes" in json_data:
+            metadata = _load_common_nodes_metadata()
+            for node in json_data["nodes"]:
+                # 先進行路由處理
+                route_node_creation(node)
+                expanded_nodes.append(node)
+                
+                # 如果是原生節點且有 params，則進行「自動擴展」
+                strategy = node.get("_strategy", "")
+                params = node.get("params", {})
+                node_id = node.get("id")
+                
+                if (strategy in ["NATIVE_DIRECT", "NATIVE_WITH_OVERLOAD"]) and params and node_id:
+                    node_name = node.get("name")
+                    node_info = metadata.get(node_name, {})
+                    
+                    # 取得正確的埠位順序
+                    input_ports = node_info.get("inputs", [])
+                    overload_id = node.get("overload")
+                    if overload_id and "overloads" in node_info:
+                        for ov in node_info["overloads"]:
+                            if ov["id"] == overload_id:
+                                input_ports = ov.get("inputs", input_ports)
+                                break
+                    
+                    # 為每個參數建立 Number 節點
+                    for i, port_name in enumerate(input_ports):
+                        if port_name in params:
+                            val = params[port_name]
+                            param_node_id = f"{node_id}_{port_name}_{int(time.time()*1000) % 10000}"
+                            
+                            # 建立輸入節點
+                            param_node = {
+                                "id": param_node_id,
+                                "name": "Number",
+                                "value": str(val),
+                                "x": node.get("x", 0) - 200, # 放在主節點左側
+                                "y": node.get("y", 0) + (i * 80),
+                                "_strategy": "CODE_BLOCK",
+                                "preview": node.get("preview", True)  # 繼承父節點的預覽設定
+                            }
+                            expanded_nodes.append(param_node)
+                            
+                            # 建立連線
+                            expanded_connectors.append({
+                                "from": param_node_id,
+                                "to": node_id,
+                                "fromPort": 0,
+                                "toPort": i
+                            })
+            
+            json_data["nodes"] = expanded_nodes
+            json_data["connectors"] = expanded_connectors
+
+        # 2. Apply offsets (已擴展後的節點)
+        if "nodes" in json_data:
+            for node in json_data["nodes"]:
+                if "x" in node:
+                    node["x"] = float(node.get("x", 0)) + base_x
+                if "y" in node:
+                    node["y"] = float(node.get("y", 0)) + base_y
+        
+        # 3. 序列化
+        instructions = json.dumps(json_data)
 
         # If requested, clear workspace first
         if clear_before_execute:
