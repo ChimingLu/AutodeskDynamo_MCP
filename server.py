@@ -36,7 +36,7 @@ def _load_guidelines() -> tuple[str, str]:
             with open(QUICK_REF_PATH, "r", encoding="utf-8") as f:
                 q_content = f.read()
     except Exception as e:
-        print(f"⚠️ Warning: Failed to load guidelines: {e}")
+        print(f"[WARN] Warning: Failed to load guidelines: {e}")
     return g_content, q_content
 
 # 初始化 Server
@@ -97,11 +97,11 @@ def _load_common_nodes_metadata() -> dict:
         for node in nodes_list:
             _common_nodes_metadata[node["name"]] = node
         
-        print(f"✅ 已載入 {len(_common_nodes_metadata)} 個節點元數據")
+        print(f"[OK] Loaded {len(_common_nodes_metadata)} nodes metadata")
         return _common_nodes_metadata
         
     except Exception as e:
-        print(f"⚠️ 無法載入節點元數據: {e}")
+        print(f"[WARN] Failed to load node metadata: {e}")
         return {}
 
 def infer_overload_from_params(node_name: str, params: dict) -> str:
@@ -141,7 +141,7 @@ def route_node_creation(node_spec: dict) -> dict:
             inferred = infer_overload_from_params(node_name, params)
             if inferred:
                 node_spec["overload"] = inferred
-                print(f"🔍 自動推斷 {node_name} 使用 Overload: {inferred}")
+                print(f"[INFO] Auto-inferred Overload for {node_name}: {inferred}")
     
     # 標記策略
     node_spec["_strategy"] = strategy
@@ -196,17 +196,17 @@ def _get_system_dynamo_processes(force_refresh: bool = False) -> list[int]:
         
     except subprocess.CalledProcessError as e:
         import sys
-        print(f"⚠️ [進程查詢失敗] tasklist 執行錯誤: {e}", file=sys.stderr)
+        print(f"[WARN] [Process Check Failed] tasklist error: {e}", file=sys.stderr)
         print(f"   Return Code: {e.returncode}, Output: {e.output}", file=sys.stderr)
         # Return cached data if available, otherwise empty
         return _cached_pids if _cached_pids else []
     except UnicodeDecodeError as e:
         import sys
-        print(f"⚠️ [編碼錯誤] tasklist 輸出解碼失敗: {e}", file=sys.stderr)
+        print(f"[WARN] [Encoding Error] tasklist output decode failed: {e}", file=sys.stderr)
         return _cached_pids if _cached_pids else []
     except Exception as e:
         import sys, traceback
-        print(f"⚠️ [未預期錯誤] 進程查詢失敗: {e}", file=sys.stderr)
+        print(f"[WARN] [Unexpected Error] Process check failed: {e}", file=sys.stderr)
         print(f"   詳細資訊:\n{traceback.format_exc()}", file=sys.stderr)
         return _cached_pids if _cached_pids else []
         
@@ -299,7 +299,7 @@ def _check_dynamo_connection() -> tuple[bool, str]:
             
             if current_session_id:
                 if _last_session_id is not None and current_session_id != _last_session_id:
-                    print(f"🔄 [SESSION CHANGED] Detected new Dynamo session: {_last_session_id} -> {current_session_id}")
+                    print(f"[SESSION CHANGED] Detected new Dynamo session: {_last_session_id} -> {current_session_id}")
                     # Optional: We could invalidate caches here if needed
                     # _commonNodesCache = None 
                 
@@ -322,7 +322,7 @@ def _check_dynamo_connection() -> tuple[bool, str]:
                 # (Note: tasklist might miss it if it closed very fast, but usually valid for zombies)
                 if connected_pid not in system_pids:
                     # Case A: Connected PID not found active (Zombie or Phantom)
-                    return False, f"⚠️ 異常: 連線至 PID {connected_pid}，但該程序似乎已不存在或無法被 tasklist 偵測。請確認 Dynamo 是否正常執行。"
+                    return False, f"[WARN] Anomaly: Connected to PID {connected_pid}, but process seems dead or undetected."
                 
                 # Case B: Multiple potential instances
                 # Case C: Connected PID is there, but there are others (Potential Zombie scenario)
@@ -330,7 +330,7 @@ def _check_dynamo_connection() -> tuple[bool, str]:
                      # Identify if we are connected to one of them.
                      other_pids = [p for p in system_pids if p != connected_pid]
                      if other_pids:
-                         return False, f"⚠️ **嚴重警告**: 偵測到多個 Dynamo/Revit 程序 (PIDs: {system_pids})。\n目前連線至 PID: {connected_pid}。\n這通常表示舊的 Dynamo 未完全關閉 (Zombie Process)。\n請務必**強制結束**所有 Revit/Dynamo 程序後再重試，否則指令將無法正確送達。"
+                         return False, f"[WARN] **CRITICAL**: Multiple Dynamo/Revit processes detected (PIDs: {system_pids}).\nCurrently connected to PID: {connected_pid}.\nThis usually indicates Zombie Processes.\nPlease FORCE KILL all Revit/Dynamo processes and retry."
 
             # 2. Check for StartMCPServer Node (New Feature)
             # User wants to be warned if the node is missing, even if connection works (via auto-start)
@@ -342,14 +342,14 @@ def _check_dynamo_connection() -> tuple[bool, str]:
                         break
             
             if not has_start_node:
-                data["mcp_warning"] = "⚠️ 建議: 未偵測到 'StartMCPServer' 節點。雖然連線正常，但建議放置該節點以確保穩定性與視覺確認。"
+                data["mcp_warning"] = "[Suggestion] 'StartMCPServer' node not detected. It is recommended to place it for stability."
             
             # 3. Check for potential Dynamo restart
             restart_detected, restart_reason = _detect_potential_restart(data)
             if restart_detected:
-                warning_msg = f"🔄 **偵測到可能的 Dynamo 重啟**: {restart_reason}\n\n建議您重新放置 'MCPControls.StartMCPServer' 節點以確保連線穩定。"
+                warning_msg = f"[RESTART DETECTED] Possible Dynamo restart: {restart_reason}\n\nRecommended: Re-place 'MCPControls.StartMCPServer' node."
                 data["mcp_restart_warning"] = warning_msg
-                print(f"🔄 [POTENTIAL RESTART] {restart_reason}")
+                print(f"[POTENTIAL RESTART] {restart_reason}")
 
             return True, json.dumps(data) 
             
@@ -364,7 +364,7 @@ def _check_dynamo_connection() -> tuple[bool, str]:
     except Exception as e:
         import traceback
         error_detail = f"未預期錯誤: {e}\n詳細資訊:\n{traceback.format_exc()}"
-        print(f"⚠️ [連線檢查失敗] {error_detail}", file=sys.stderr)
+        print(f"[WARN] [Connection Check Failed] {error_detail}", file=sys.stderr)
         return False, str(e)
 
 # ==========================================
@@ -373,14 +373,14 @@ def _check_dynamo_connection() -> tuple[bool, str]:
 @mcp.tool()
 def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = False, base_x: float = 0, base_y: float = 0) -> str:
     """
-    Execute a set of instructions to create nodes and connections in Dynamo.
+    在 Dynamo 中執行一組指令，創建節點與連線。
     
-    Args:
-        instructions: A JSON string describing the nodes and connections.
-        clear_before_execute: If True, clears the current workspace before placing new nodes.
-        base_x: Optional X offset to add to all nodes.
-        base_y: Optional Y offset to add to all nodes.
-                      Example:
+    參數:
+        instructions: 描述節點與連線的 JSON 字串。
+        clear_before_execute: 若為 True，會在放置新節點前清空當前工作區。
+        base_x: 可選的 X 軸偏移量，將應用於所有節點。
+        base_y: 可選的 Y 軸偏移量，將應用於所有節點。
+                      範例:
                       {
                         "nodes": [
                           {"id": "n1", "name": "Point.ByCoordinates", "x": 0, "y": 0}
@@ -388,8 +388,8 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
                         "connectors": []
                       }
                       
-    Returns:
-        Status message.
+    返回:
+        執行狀態訊息。
     """
     # 強制檢查連線
     # 強制檢查連線
@@ -512,20 +512,20 @@ def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = 
 @mcp.tool()
 def list_available_nodes(filter_text: str = "", search_scope: str = "default", detail: str = "basic") -> str:
     """
-    List available nodes in the current Dynamo session, including .dyf custom nodes from packages.
+    列出當前 Dynamo 工作階段中的可用節點，包含來自套件的 .dyf 自訂節點。
     
-    Args:
-        filter_text: Optional text to filter node names.
-        search_scope: "default" (Recommended) searches Common Nodes + matches from Global list (limit 20).
-                      "all" searches entire Global Node Library (limit 200). 
-                      Use "all" ONLY if the user explicitly asks to "search all nodes" or "global search".
-        detail: Level of detail to return:
-                "basic" (default) - Only name and fullName (fastest, lowest tokens)
-                "standard" - Adds inputs, outputs, and category (includes .dyf metadata)
-                "full" - Includes description (highest tokens)
+    參數:
+        filter_text: 可選的篩選文字，用於過濾節點名稱。
+        search_scope: "default" (建議) 搜尋常用節點 + 全域清單中的匹配項 (限制 20 筆)。
+                      "all" 搜尋整個全域節點庫 (限制 200 筆)。
+                      僅在使用者明確要求「搜尋所有節點」或「全域搜尋」時使用 "all"。
+        detail: 返回的詳細程度:
+                "basic" (預設) - 僅包含名稱與完整名稱 (最快，最少 token)
+                "standard" - 新增輸入、輸出與類別 (包含 .dyf 元數據)
+                "full" - 包含描述 (最多 token)
         
-    Returns:
-        JSON string of available nodes with metadata.
+    返回:
+        包含節點元數據的 JSON 字串。
     """
     # 強制檢查連線
     is_ok, status_or_err = _check_dynamo_connection()
@@ -561,10 +561,10 @@ def list_available_nodes(filter_text: str = "", search_scope: str = "default", d
 @mcp.tool()
 def analyze_workspace() -> str:
     """
-    Get the current state of all nodes in the Dynamo workspace, including errors and warnings.
+    取得 Dynamo 工作區中所有節點的當前狀態，包含錯誤與警告訊息。
     
-    Returns:
-        JSON string containing workspace name, node count, and individual node states.
+    返回:
+        包含工作區名稱、節點數量與個別節點狀態的 JSON 字串。
     """
     # 直接回傳檢查結果
     is_ok, status_or_err = _check_dynamo_connection()
@@ -574,11 +574,11 @@ def analyze_workspace() -> str:
 @mcp.tool()
 def clear_workspace() -> str:
     """
-    Clear all nodes and connectors from the current Dynamo workspace.
-    Use this before starting a new design or when nodes are overlapping.
+    清除 Dynamo 工作區中的所有節點與連線。
+    建議在開始新設計或節點重疊時使用此功能。
     
-    Returns:
-        Status message.
+    返回:
+        執行狀態訊息。
     """
     # 強制檢查連線
     is_ok, status_or_err = _check_dynamo_connection()
@@ -614,11 +614,11 @@ def clear_workspace() -> str:
 @mcp.tool()
 def get_mcp_guidelines() -> str:
     """
-    Get the full content of GEMINI.md and QUICK_REFERENCE.md.
-    AI Agents should consult this when encountering errors or at the start of a session.
+    取得 GEMINI.md 與 QUICK_REFERENCE.md 的完整內容。
+    AI 代理應在遭遇錯誤或工作階段開始時查閱此文件。
     
-    Returns:
-        Combined string of both files.
+    返回:
+        合併兩個檔案內容的字串。
     """
     g_content, q_content = _load_guidelines()
     return f"# MCP GUIDELINES\n\n{g_content}\n\n# QUICK REFERENCE\n\n{q_content}"
@@ -663,13 +663,13 @@ if not os.path.exists(SCRIPT_DIR):
 @mcp.tool()
 def get_script_library() -> str:
     """
-    Get a list of available scripts in the library.
+    取得腳本庫中的可用腳本清單。
     
-    Scripts are stored in: <PROJECT_ROOT>/DynamoScripts/
-    All .json files in this directory are automatically discovered.
+    腳本儲存位置: <專案根目錄>/DynamoScripts/
+    此目錄中的所有 .json 檔案會被自動探索。
     
-    Returns:
-        JSON string list of script metadata (name, description, file path).
+    返回:
+        包含腳本元數據 (名稱、描述、檔案路徑) 的 JSON 字串清單。
     """
     scripts = []
     try:
@@ -695,18 +695,18 @@ def get_script_library() -> str:
 @mcp.tool()
 def save_script_to_library(name: str, description: str, content_json: str) -> str:
     """
-    Save a Dynamo script to the library for future reuse.
+    將 Dynamo 腳本儲存至腳本庫，供未來重複使用。
     
-    Files are saved to: <PROJECT_ROOT>/DynamoScripts/<name>.json
-    This folder is the central repository for reusable Dynamo graph definitions.
+    檔案儲存位置: <專案根目錄>/DynamoScripts/<名稱>.json
+    此資料夾是可重複使用的 Dynamo 圖表定義的中央儲存庫。
     
-    Args:
-        name: Unique name for the script (e.g., 'grid_2x2').
-        description: Brief description of what the script does.
-        content_json: The JSON instructions for nodes and connectors.
+    參數:
+        name: 腳本的唯一名稱 (例如: 'grid_2x2')。
+        description: 腳本功能的簡短描述。
+        content_json: 節點與連線的 JSON 指令。
         
-    Returns:
-        Success message with absolute file path, or error message.
+    返回:
+        包含絕對檔案路徑的成功訊息，或錯誤訊息。
     """
     try:
         # Validate content JSON
@@ -729,19 +729,19 @@ def save_script_to_library(name: str, description: str, content_json: str) -> st
 @mcp.tool()
 def load_script_from_library(name: str, base_x: float = 0, base_y: float = 0) -> str:
     """
-    Load a Dynamo script content from the library.
+    從腳本庫載入 Dynamo 腳本內容。
     
-    Loads from: <PROJECT_ROOT>/DynamoScripts/<name>.json
-    The returned JSON can be directly passed to execute_dynamo_instructions.
+    載入來源: <專案根目錄>/DynamoScripts/<名稱>.json
+    返回的 JSON 可直接傳遞給 execute_dynamo_instructions 執行。
     
-    Args:
-        name: The name of the script to load (without .json extension).
-        base_x: Optional X offset to add to all nodes in the script.
-        base_y: Optional Y offset to add to all nodes in the script.
+    參數:
+        name: 要載入的腳本名稱 (不含 .json 副檔名)。
+        base_x: 可選的 X 軸偏移量，將應用於腳本中的所有節點。
+        base_y: 可選的 Y 軸偏移量，將應用於腳本中的所有節點。
         
-    Returns:
-        The content JSON string (nodes and connectors) ready for execution.
-        Returns error message if script not found.
+    返回:
+        可直接執行的 JSON 內容字串 (節點與連線)。
+        若腳本未找到則返回錯誤訊息。
     """
     try:
         file_path = os.path.join(SCRIPT_DIR, f"{name}.json")
@@ -766,31 +766,38 @@ def load_script_from_library(name: str, base_x: float = 0, base_y: float = 0) ->
         return f"Error loading script: {str(e)}"
 
 if __name__ == "__main__":
-    print("==========================================")
-    print("   BIM Assistant MCP Server (v2.3)   ")
-    print("==========================================")
-    print(f"Server Path: {os.path.abspath(__file__)}")
-    print(f"Config Path: {CONFIG_PATH}")
-    if CONFIG:
-        print("✅ Configuration loaded successfully.")
-    else:
-        print("⚠️  Warning: Configuration NOT loaded or empty.")
+    import sys
     
-    print(f"Script Library: {SCRIPT_DIR}")
+    # helper for stderr logging
+    def log_startup(msg):
+        print(msg, file=sys.stderr)
+
+    log_startup("==========================================")
+    log_startup("   BIM Assistant MCP Server (v2.3)   ")
+    log_startup("==========================================")
+    log_startup(f"Server Path: {os.path.abspath(__file__)}")
+    log_startup(f"Config Path: {CONFIG_PATH}")
+    if CONFIG:
+        log_startup("[OK] Configuration loaded successfully.")
+    else:
+        log_startup("[WARN] Warning: Configuration NOT loaded or empty.")
+    
+    log_startup(f"Script Library: {SCRIPT_DIR}")
     if not os.path.exists(SCRIPT_DIR):
-        print(f"Creating script directory: {SCRIPT_DIR}")
+        log_startup(f"Creating script directory: {SCRIPT_DIR}")
         os.makedirs(SCRIPT_DIR)
     
-    print("Starting FastMCP Server...")
-    print("==========================================")
+    log_startup("Starting FastMCP Server...")
+    log_startup("==========================================")
     
     # CRITICAL STARTUP WARNINGS
-    print("\n" + "!" * 50)
-    print("CRITICAL WARNING: PLEASE READ")
-    print("!" * 50)
-    print("1. 若需重啟 Dynamo，請務必先按 Ctrl+C 停止此 Server！")
-    print("   (Stop this server BEFORE closing Dynamo window)")
-    print("2. 每次對話開始前，建議使用 'get_mcp_guidelines' 複習規範。")
-    print("!" * 50 + "\n")
+    log_startup("\n" + "!" * 50)
+    log_startup("CRITICAL WARNING: PLEASE READ")
+    log_startup("!" * 50)
+    log_startup("1. If you need to restart Dynamo, please press Ctrl+C to stop this Server first!")
+    log_startup("   (Stop this server BEFORE closing Dynamo window)")
+    log_startup("2. Before starting each conversation, it is recommended to use 'get_mcp_guidelines' to review the specifications.")
+    log_startup("!" * 50 + "\n")
     
-    mcp.run(transport="sse")
+    # Use stdio transport for Claude Desktop integration
+    mcp.run(transport="stdio")

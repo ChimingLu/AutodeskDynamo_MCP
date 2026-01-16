@@ -1,18 +1,18 @@
 $ErrorActionPreference = "Stop"
 
 # ========================================
-# 步驟 0: 轉換配置檔案
+# Step 0: Convert Config
 # ========================================
-Write-Host "`n[0/4] 更新配置檔案..." -ForegroundColor Cyan
+Write-Host "`n[0/4] Updating Config..." -ForegroundColor Cyan
 $UpdateConfigScript = Join-Path $PSScriptRoot "scripts\update_config.py"
 if (Test-Path $UpdateConfigScript) {
     python $UpdateConfigScript
     if ($LASTEXITCODE -ne 0) { 
-        Write-Warning "配置轉換失敗，將使用現有的 mcp_config.json"
+        Write-Warning "Config conversion failed, using existing mcp_config.json"
     }
 }
 else {
-    Write-Host "   ⚠️  未找到 update_config.py，跳過配置更新" -ForegroundColor Yellow
+    Write-Host "   WARNING: update_config.py not found, skipping config update" -ForegroundColor Yellow
 }
 
 # Configuration

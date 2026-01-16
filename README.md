@@ -124,8 +124,9 @@ print(f"狀態: {health['status']}, 運行時間: {health['uptimeSeconds']}秒")
 }
 ```
 
-## 📖 使用與控制 (Antigravity)
+## 📖 使用與控制 (Clients)
 
+### 1. Antigravity / Gemini CLI
 在 Antigravity 的 MCP 設定中加入：
 ```json
 "dynamo-mcp": {
@@ -133,7 +134,20 @@ print(f"狀態: {health['status']}, 運行時間: {health['uptimeSeconds']}秒")
   "args": ["絕對路徑/server.py"]
 }
 ```
-隨後透過中文指令進行控制，例如：「幫我畫一個 100x100 的長方體，畫之前先清空畫面」。
+
+### 2. Claude Desktop (推薦)
+點擊 Claude Desktop 設定中的 "Edit Config" 按鈕，加入以下內容：
+> **注意**：必須使用 `python` 指令，且路徑請使用 **絕對路徑** (e.g. `D:\\...`)。
+
+```json
+"dynamo-mcp": {
+  "command": "python",
+  "args": [
+    "絕對路徑\\server.py"
+  ]
+}
+```
+設定完成後，Claude 列表中會出現 `dynamo-mcp` (綠燈)，即可開始使用。
 
 ---
 

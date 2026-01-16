@@ -48,6 +48,37 @@ namespace DynamoMCPListener
                     MCPLogger.Info("[GraphHandler] Workspace cleared via DeleteModelCommand.");
                     return "{\"status\": \"ok\", \"message\": \"Workspace cleared\"}";
                 }
+
+                if (action == "get_graph_status")
+                {
+                    var nodes = _dynamoModel.CurrentWorkspace.Nodes.Select(n => new
+                    {
+                        id = n.GUID.ToString(),
+                        name = n.Name, // Use Name (which might vary) or CreationName? StartMCPServer usually has a specific Title/Name.
+                        // For CustomNodes/StartMCPServer, Name might be "StartMCPServer" or "MCPControls.StartMCPServer".
+                        // Better to include both if possible, or just Name and let python check. 
+                        // Python checks: node.get("name") == "MCPControls.StartMCPServer"
+                        // In Dynamo, Custom Node name might be just "StartMCPServer". 
+                        // Let's verify what Name returns for the node.
+                        // Actually, let's also return typical position info.
+                        x = n.X,
+                        y = n.Y
+                    }).ToList();
+
+                    var statusData = new
+                    {
+                        sessionId = _sessionId,
+                        processId = System.Diagnostics.Process.GetCurrentProcess().Id,
+                        workspace = new {
+                            name = _dynamoModel.CurrentWorkspace.Name,
+                            fileName = _dynamoModel.CurrentWorkspace.FileName
+                        },
+                        nodeCount = nodes.Count,
+                        nodes = nodes
+                    };
+
+                    return JsonConvert.SerializeObject(statusData);
+                }
                 
                 // 1. Create Nodes
                 if (data["nodes"] != null)

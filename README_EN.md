@@ -124,8 +124,9 @@ print(f"Status: {health['status']}, Uptime: {health['uptimeSeconds']} seconds")
 }
 ```
 
-## 📖 Usage and Control (Antigravity)
+## 📖 Usage and Control (Clients)
 
+### 1. Antigravity / Gemini CLI
 Add the following to Antigravity's MCP configuration:
 ```json
 "dynamo-mcp": {
@@ -133,7 +134,20 @@ Add the following to Antigravity's MCP configuration:
   "args": ["absolute/path/to/server.py"]
 }
 ```
-Then control via commands in your preferred language, for example: "Please draw a 100x100 cuboid, clear the canvas first".
+
+### 2. Claude Desktop (Recommended)
+Click the "Edit Config" button in Claude Desktop settings and add the following:
+> **Note**: You must use the `python` command, and the path must be an **absolute path** (e.g. `D:\\AI\\...`).
+
+```json
+"dynamo-mcp": {
+  "command": "python",
+  "args": [
+    "D:\\AI\\An\\AutodeskDynamo_MCP\\server.py"
+  ]
+}
+```
+After configuration, `dynamo-mcp` (green light) will appear in the Claude list, and you can start using it.
 
 ---
 
