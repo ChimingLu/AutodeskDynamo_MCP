@@ -10,7 +10,10 @@
   ],
   "dependencies": [],
   "license": "Apache-2.0",
-  "node_libraries": [
-    "DynamoMCPListener, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+  "view_extensions": [
+    {
+      "assembly_name": "bin\\DynamoMCPListener.dll",
+      "type_name": "DynamoMCPListener.ViewExtension"
+    }
   ]
 }

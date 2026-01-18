@@ -9,6 +9,22 @@
 
 ---
 
+## 🎨 節點創建策略
+
+> **完整技術指南**：[`domain/node_creation_strategy.md`](domain/node_creation_strategy.md)
+
+### 雙軌制快速決策
+
+| 場景 | 推薦方法 | JSON 範例 |
+|:---|:---:|:---|
+| 簡單幾何 | Code Block | `{"name": "Number", "value": "Point.ByCoordinates(0,0,0);"}` |
+| 參數化節點 | 自動擴展 | `{"name": "Cuboid.ByLengths", "params": {"width": 100}}` |
+| 複雜嵌套 | Code Block | `{"name": "Number", "value": "Solid.Difference(...)"}` |
+
+**降級原則**: 軌道 B (自動擴展) 失敗時，自動降級至軌道 A (Code Block)。
+
+---
+
 ## 🛠️ 故障排除
 
 > **完整故障排除流程請參考**：[`domain/troubleshooting.md`](domain/troubleshooting.md)

@@ -49,6 +49,9 @@
 - **`domain/`**: **[SOP 知識庫]** 標準操作程序與故障排除指南。
   - `startup_checklist.md`: 啟動檢查清單（AI 初始化必讀）
   - `troubleshooting.md`: 完整故障排除流程
+  - `node_creation_strategy.md`: **[NEW]** 雙軌節點創建策略完整技術指南（決策樹 + 實戰案例）
+  - `architecture_analysis.md`: **[NEW]** 架構衝突診斷報告與雙軌制改善方案
+  - `visual_analysis_workflow.md`: `/image` 指令的標準執行流程
 - `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。**（此效用目錄被 Git 忽略，腳本不會上傳）**
 - `examples/`: 提供給開發者的基準範例。
 - `image/`: **[視覺化產出]** 存放 `/image` 指令產出的腳本分析圖表與技術文檔。**（此產出目錄被 Git 忽略，圖片不會上傳）**
