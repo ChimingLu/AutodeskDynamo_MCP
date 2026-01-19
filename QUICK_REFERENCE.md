@@ -13,15 +13,54 @@
 
 > **完整技術指南**：[`domain/node_creation_strategy.md`](domain/node_creation_strategy.md)
 
-### 雙軌制快速決策
+### 選擇正確的方案
 
-| 場景 | 推薦方法 | JSON 範例 |
+| 場景 | 推薦方法 | 關鍵要點 |
 |:---|:---:|:---|
-| 簡單幾何 | Code Block | `{"name": "Number", "value": "Point.ByCoordinates(0,0,0);"}` |
-| 參數化節點 | 自動擴展 | `{"name": "Cuboid.ByLengths", "params": {"width": 100}}` |
-| 複雜嵌套 | Code Block | `{"name": "Number", "value": "Solid.Difference(...)"}` |
+| 簡單單一幾何 | Code Block | 一個節點包含所有邏輯 |
+| 複雜視覺化流程 | 原生節點 + 連線 | 清晰展示計算流程 |
+| 需要調試參數 | 原生節點 | 易於修改和測試 |
 
-**降級原則**: 軌道 B (自動擴展) 失敗時，自動降級至軌道 A (Code Block)。
+---
+
+### ✅ 正確的原生節點格式
+
+#### 創建 Point.ByCoordinates
+
+**完整範例**（使用 Number 節點提供參數）：
+```json
+{
+  "nodes": [
+    {"id": "num_x", "name": "Number", "value": "10", "x": 0, "y": 0},
+    {"id": "num_y", "name": "Number", "value": "20", "x": 0, "y": 50},
+    {"id": "num_z", "name": "Number", "value": "30", "x": 0, "y": 100},
+    {"id": "pt1", "name": "Point.ByCoordinates", "x": 300, "y": 50}
+  ],
+  "connectors": [
+    {"from": "num_x", "to": "pt1", "fromIndex": 0, "toIndex": 0},
+    {"from": "num_y", "to": "pt1", "fromIndex": 0, "toIndex": 1},
+    {"from": "num_z", "to": "pt1", "fromIndex": 0, "toIndex": 2}
+  ]
+}
+```
+
+**關鍵要求**：
+1. ✅ 使用 `"name"` 欄位（不是 `"type"`）
+2. ✅ 不要使用 `"inputs"` 物件
+3. ✅ 參數值透過 Number 節點 + connectors 提供
+
+---
+
+### ❌ 錯誤格式（不要使用）
+
+```json
+{
+  "nodes": [{
+    "type": "Point.ByCoordinates",  // ❌ 錯誤：應該用 "name"
+    "inputs": {"x": 10, "y": 20}    // ❌ 錯誤：不支援 "inputs"
+  }]
+}
+```
 
 ---
 

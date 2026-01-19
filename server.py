@@ -183,9 +183,14 @@ class MCPBridgeServer:
             async for message in websocket:
                 try:
                     request = json.loads(message)
+                    
+                    # 驗證 JSON-RPC 2.0 格式
+                    if request.get("jsonrpc") != "2.0":
+                        log(f"[WARN] Invalid JSON-RPC version: {request.get('jsonrpc')}")
+                    
                     method = request.get("method")
                     params = request.get("params", {})
-                    request_id = request.get("requestId")
+                    request_id = request.get("id")  # 使用 id 而非 requestId
 
                     log(f"[MCP Bridge] Received: {method}")
 
@@ -197,13 +202,25 @@ class MCPBridgeServer:
                     else:
                         result = {"error": f"Unknown method: {method}"}
 
-                    # Send response
-                    response = {"requestId": request_id, "result": result}
+                    # Send response (JSON-RPC 2.0 格式)
+                    response = {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": result
+                    }
                     await websocket.send(json.dumps(response, ensure_ascii=False))
 
                 except Exception as e:
                     log(f"[MCP Bridge] Request error: {e}")
-                    error_response = {"requestId": request.get("requestId"), "result": {"error": str(e)}}
+                    # JSON-RPC 2.0 錯誤格式
+                    error_response = {
+                        "jsonrpc": "2.0",
+                        "id": request.get("id"),
+                        "error": {
+                            "code": -32603,  # Internal error
+                            "message": str(e)
+                        }
+                    }
                     await websocket.send(json.dumps(error_response))
 
         except websockets.exceptions.ConnectionClosed:
@@ -214,12 +231,51 @@ class MCPBridgeServer:
     async def _list_tools(self):
         """返回可用工具列表"""
         tools = [
-            {"name": "execute_dynamo_instructions", "description": "在 Dynamo 中執行一組指令，創建節點與連線。", "inputSchema": {"type": "object", "properties": {"instructions": {"type": "string"}}, "required": ["instructions"]}},
-            {"name": "analyze_workspace", "description": "取得 Dynamo 工作區中所有節點的當前狀態。", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "get_graph_status", "description": "取得工作區圖表完整狀態 JSON。", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "clear_workspace", "description": "清除工作區內容。", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "get_mcp_guidelines", "description": "取得規範內容。", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "get_script_library", "description": "取得腳本庫清單。", "inputSchema": {"type": "object", "properties": {}}},
+            {
+                "name": "execute_dynamo_instructions",
+                "description": "在 Dynamo 中執行節點創建指令。instructions 參數必須是 JSON 字串，包含 'nodes' 陣列（節點定義）和 'connectors' 陣列（連線定義）。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "instructions": {
+                            "type": "string",
+                            "description": "JSON 格式的完整圖形定義。必須包含兩個欄位：'nodes'（節點陣列）和 'connectors'（連線陣列）。範例：{\"nodes\":[{\"id\":\"cb1\",\"name\":\"Number\",\"value\":\"10;\",\"x\":0,\"y\":0}],\"connectors\":[]}"
+                        }
+                    },
+                    "required": ["instructions"]
+                },
+                "destructiveHint": True
+            },
+            {
+                "name": "analyze_workspace",
+                "description": "取得 Dynamo 工作區中所有節點的當前狀態。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "readOnlyHint": True
+            },
+            {
+                "name": "get_graph_status",
+                "description": "取得工作區圖表完整狀態 JSON。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "readOnlyHint": True
+            },
+            {
+                "name": "clear_workspace",
+                "description": "清除工作區內容。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "destructiveHint": True
+            },
+            {
+                "name": "get_mcp_guidelines",
+                "description": "取得規範內容。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "readOnlyHint": True
+            },
+            {
+                "name": "get_script_library",
+                "description": "取得腳本庫清單。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "readOnlyHint": True
+            },
         ]
         return tools
 
@@ -268,7 +324,23 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
     if not sessions: return "❌ 失敗: 未連線"
     session_id = sessions[-1]
     try:
-        json_data = json.loads(instructions)
+        # Parse and validate JSON
+        try:
+            json_data = json.loads(instructions)
+        except json.JSONDecodeError as e:
+            return f"❌ JSON 解析錯誤: {str(e)}\n正確格式範例：{{\"nodes\":[...],\"connectors\":[...]}}"
+        
+        # Validate format
+        if not isinstance(json_data, dict):
+            return f"❌ 格式錯誤: instructions 必須是 JSON 物件（{{}}），不是{type(json_data).__name__}\n正確格式：{{\"nodes\":[...],\"connectors\":[...]}}"
+        
+        # Validate array format (common AI error)
+        if isinstance(json_data, list):
+            json_data = {"nodes": json_data, "connectors": []}
+            
+        if "nodes" not in json_data:
+            return f"❌ 格式錯誤: JSON 必須包含 'nodes' 欄位\n當前內容：{list(json_data.keys())}\n正確格式：{{\"nodes\":[...],\"connectors\":[...]}}"
+        
         if "nodes" in json_data:
             for node in json_data["nodes"]:
                 route_node_creation(node)
@@ -276,6 +348,7 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
                 node["y"] = float(node.get("y", 0)) + base_y
         if clear_before_execute: 
             await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
+        
         response = await ws_manager.send_command_async(session_id, json_data)
         return f"✅ 成功" if response.get("status") == "ok" else f"❌ 失敗: {response.get('message')}"
     except Exception as e: 

@@ -81,8 +81,19 @@ Write-Host "   - Unblocking files to prevent 'Mark of the Web' issues..."
 Get-ChildItem -Path $TargetPackageDir -Recurse | Unblock-File
 
 # 4. Deploy Config
-Write-Host "`n[4/4] Deploying Config & Updating ViewExtension Paths..."
-Copy-Item "mcp_config.json" -Destination $TargetPackageDir -Force
+Write-Host "`n[4/4] Deploying Config & Updating ViewExtension Paths..." -ForegroundColor Cyan
+
+# Deploy mcp_config.json to package directory
+$configSource = Join-Path $PSScriptRoot "mcp_config.json"
+$configDest = Join-Path $TargetPackageDir "mcp_config.json"
+
+if (Test-Path $configSource) {
+    Copy-Item $configSource $configDest -Force
+    Write-Host "   - Config file deployed: mcp_config.json" -ForegroundColor Green
+}
+else {
+    Write-Warning "   - Config file not found: $configSource"
+}
 
 # --- CLEANUP STRATEGY: Remove Legacy XMLs and rely on valid pkg.json ---
 # We previously broadcasted XMLs everywhere. This creates "Double Loading" risks if pkg.json also works.

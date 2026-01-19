@@ -64,10 +64,10 @@ function connectToPython() {
                 console.error(`[MCP Bridge] ← Received from Python:`, JSON.stringify(response).substring(0, 200));
 
                 // 處理回應
-                if (response.requestId && pendingRequests.has(response.requestId)) {
-                    const { resolve, timer } = pendingRequests.get(response.requestId);
+                if (response.id && pendingRequests.has(response.id)) {
+                    const { resolve, timer } = pendingRequests.get(response.id);
                     clearTimeout(timer);
-                    pendingRequests.delete(response.requestId);
+                    pendingRequests.delete(response.id);
                     resolve(response.result);
                 }
             } catch (error) {
@@ -112,7 +112,12 @@ async function sendToPython(method, params) {
     }
 
     const requestId = `req_${++requestCounter}`;
-    const request = { requestId, method, params };
+    const request = {
+        jsonrpc: "2.0",
+        id: requestId,
+        method,
+        params
+    };
 
     console.error(`[MCP Bridge] → Sending to Python:`, JSON.stringify(request).substring(0, 200));
 

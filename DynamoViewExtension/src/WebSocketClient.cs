@@ -120,28 +120,27 @@ namespace DynamoMCPListener
             {
                 MCPLogger.Info($"[WS] Received command: {json.Substring(0, Math.Min(json.Length, 100))}...");
                 
-                // Check Mode B Authorization locally too (optional but safer)
-                bool hasStartNode = CheckForStartNode();
-                
-                // Allow get_graph_status even without Start node
-                var data = JObject.Parse(json);
-                string action = data["action"]?.ToString();
-                
-                if (!hasStartNode && action != "get_graph_status")
-                {
-                    await SendMessageAsync(JsonConvert.SerializeObject(new {
-                        status = "error",
-                        message = "Authorization Required: Please place 'StartMCPServer' node in workspace."
-                    }));
-                    return;
-                }
+                string response = "";
 
-                string response = _handler.HandleCommand(json);
+                // In WebSocket mode, the connection itself represents authorization
+                // No need to check for StartMCPServer node
+
+                // Ensure executing on UI Thread
+                // Use System.Windows.Application.Current.Dispatcher since we are in a WPF context (Dynamo)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => 
+                {
+                     response = _handler.HandleCommand(json);
+                });
+
                 await SendMessageAsync(response);
             }
             catch (Exception ex)
             {
                 MCPLogger.Error($"[WS] Error processing message: {ex.Message}");
+                // Try to send error back if possible
+                try {
+                     await SendMessageAsync($"{{\"error\": \"Processing error: {ex.Message}\"}}");
+                } catch {}
             }
         }
 
