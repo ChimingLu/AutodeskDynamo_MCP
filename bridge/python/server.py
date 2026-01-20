@@ -26,9 +26,9 @@ def log(m): print(m, file=sys.stderr)
 # ==========================================
 # 基礎路徑與設定
 # ==========================================
-GUIDELINE_PATH = os.path.join(os.path.dirname(__file__), "GEMINI.md")
-QUICK_REF_PATH = os.path.join(os.path.dirname(__file__), "QUICK_REFERENCE.md")
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "mcp_config.json")
+GUIDELINE_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "GEMINI.md"))
+QUICK_REF_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "QUICK_REFERENCE.md"))
+CONFIG_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "mcp_config.json"))
 
 CONFIG = {}
 if os.path.exists(CONFIG_PATH):
@@ -39,7 +39,7 @@ if os.path.exists(CONFIG_PATH):
         log(f"Failed to load config: {e}")
 
 script_rel_path = CONFIG.get("paths", {}).get("scripts", "DynamoScripts")
-SCRIPT_DIR = os.path.join(os.path.dirname(__file__), script_rel_path)
+SCRIPT_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", script_rel_path))
 if not os.path.exists(SCRIPT_DIR):
     os.makedirs(SCRIPT_DIR)
 
@@ -66,7 +66,7 @@ def _load_common_nodes_metadata() -> dict:
     global _common_nodes_metadata
     if _common_nodes_metadata is not None: return _common_nodes_metadata
     try:
-        metadata_path = os.path.join(os.path.dirname(__file__), "DynamoViewExtension", "common_nodes.json")
+        metadata_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "DynamoViewExtension", "common_nodes.json"))
         with open(metadata_path, "r", encoding="utf-8") as f:
             nodes_list = json.load(f)
         _common_nodes_metadata = {node["name"]: node for node in nodes_list}
