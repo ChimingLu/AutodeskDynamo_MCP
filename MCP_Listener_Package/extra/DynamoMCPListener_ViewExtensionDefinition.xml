@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ExtensionDefinition>
-  <AssemblyPath>C:\Users\LU\AppData\Roaming\Dynamo\Dynamo Revit\3.3\packages\MCP Listener\bin\DynamoMCPListener.dll</AssemblyPath>
-  <TypeName>DynamoMCPListener.ViewExtension</TypeName>
-</ExtensionDefinition>

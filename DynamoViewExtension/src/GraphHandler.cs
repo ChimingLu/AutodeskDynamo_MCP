@@ -34,17 +34,19 @@ namespace DynamoMCPListener
             try
             {
                 var data = JObject.Parse(jsonLine);
+                var errors = new List<string>();
 
                 // 0. Handle Actions (like clear_graph)
                 string action = data["action"]?.ToString();
                 if (action == "clear_graph")
                 {
+                    // This must be run on UI thread, handled by WebSocketClient dispatcher
                     var nodesToDelete = _dynamoModel.CurrentWorkspace.Nodes.Select(n => n.GUID).ToList();
                     if (nodesToDelete.Any())
                     {
                         _dynamoModel.ExecuteCommand(new DynamoModel.DeleteModelCommand(nodesToDelete));
                     }
-                    _nodeIdMap.Clear(); // 清空映射表
+                    _nodeIdMap.Clear();
                     MCPLogger.Info("[GraphHandler] Workspace cleared via DeleteModelCommand.");
                     return "{\"status\": \"ok\", \"message\": \"Workspace cleared\"}";
                 }
@@ -54,13 +56,7 @@ namespace DynamoMCPListener
                     var nodes = _dynamoModel.CurrentWorkspace.Nodes.Select(n => new
                     {
                         id = n.GUID.ToString(),
-                        name = n.Name, // Use Name (which might vary) or CreationName? StartMCPServer usually has a specific Title/Name.
-                        // For CustomNodes/StartMCPServer, Name might be "StartMCPServer" or "MCPControls.StartMCPServer".
-                        // Better to include both if possible, or just Name and let python check. 
-                        // Python checks: node.get("name") == "MCPControls.StartMCPServer"
-                        // In Dynamo, Custom Node name might be just "StartMCPServer". 
-                        // Let's verify what Name returns for the node.
-                        // Actually, let's also return typical position info.
+                        name = n.Name,
                         x = n.X,
                         y = n.Y
                     }).ToList();
@@ -78,6 +74,11 @@ namespace DynamoMCPListener
                     };
 
                     return JsonConvert.SerializeObject(statusData);
+                } else if (action == "list_nodes") {
+                    // Start of list_nodes implementation
+                    string filter = data["filter"]?.ToString() ?? "";
+                    // Minimal implementation, can be expanded
+                    return "{\"status\": \"ok\", \"nodes\": []}"; 
                 }
                 
                 // 1. Create Nodes
@@ -85,7 +86,16 @@ namespace DynamoMCPListener
                 {
                     foreach (var n in data["nodes"])
                     {
-                        CreateNode(n);
+                        try 
+                        {
+                            CreateNode(n);
+                        }
+                        catch (Exception ex)
+                        {
+                            string msg = $"[CreateNode Failed] {n["name"]} (ID: {n["id"]}): {ex.Message}";
+                            MCPLogger.Error(msg, ex);
+                            errors.Add(msg);
+                        }
                     }
                 }
 
@@ -94,130 +104,124 @@ namespace DynamoMCPListener
                 {
                     foreach (var c in data["connectors"])
                     {
-                        CreateConnection(c);
+                        try
+                        {
+                            CreateConnection(c);
+                        }
+                        catch (Exception ex)
+                        {
+                            string msg = $"[CreateConnection Failed] {c["from"]}->{c["to"]}: {ex.Message}";
+                            MCPLogger.Error(msg, ex);
+                            errors.Add(msg);
+                        }
                     }
                 }
+
+                if (errors.Any())
+                {
+                    return JsonConvert.SerializeObject(new { status = "error", message = "Partial failure", errors = errors });
+                }
+
                 return "{\"status\": \"ok\"}";
             }
             catch (Exception ex)
             {
                 MCPLogger.Error($"Error executing instructions: {ex.Message}");
-                return $"{{\"error\": \"{ex.Message}\"}}";
+                return JsonConvert.SerializeObject(new { status = "error", message = ex.Message });
             }
         }
 
         private void CreateNode(JToken n)
         {
-            try
+            // Removed try-catch to allow bubbling to HandleCommand
+            string nodeName = n["name"]?.ToString();
+            string nodeIdStr = n["id"]?.ToString();
+            double x = n["x"]?.ToObject<double>() ?? 0;
+            double y = n["y"]?.ToObject<double>() ?? 0;
+
+            MCPLogger.Info($"[CreateNode] 開始創建節點: {nodeName} (ID: {nodeIdStr})");
+
+            Guid dynamoGuid = Guid.TryParse(nodeIdStr, out Guid parsedGuid) ? parsedGuid : Guid.NewGuid();
+            
+            if (!string.IsNullOrEmpty(nodeIdStr))
             {
-                string nodeName = n["name"]?.ToString();
-                string nodeIdStr = n["id"]?.ToString();
-                double x = n["x"]?.ToObject<double>() ?? 0;
-                double y = n["y"]?.ToObject<double>() ?? 0;
+                _nodeIdMap[nodeIdStr] = dynamoGuid;
+            }
 
-                MCPLogger.Info($"[CreateNode] 開始創建節點: {nodeName} (ID: {nodeIdStr})");
-
-                Guid dynamoGuid = Guid.TryParse(nodeIdStr, out Guid parsedGuid) ? parsedGuid : Guid.NewGuid();
-                
-                // 記錄字串 ID 與 GUID 的映射
-                if (!string.IsNullOrEmpty(nodeIdStr))
-                {
-                    _nodeIdMap[nodeIdStr] = dynamoGuid;
-                    MCPLogger.Info($"[CreateNode] 映射 ID: {nodeIdStr} -> {dynamoGuid}");
-                }
-
-                // === 優先處理 Code Block 類型節點 ===
-                if (nodeName == "Number" || nodeName == "Code Block")
-                {
-                    MCPLogger.Info($"[CreateNode] 識別為 Code Block 節點，位置: ({x}, {y})");
-                    var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
-                    _dynamoModel.ExecuteCommand(cmd);
-                    
-                    if (n["value"] != null)
-                    {
-                        string val = n["value"].ToString();
-                        if (!val.EndsWith(";")) val += ";";
-                        MCPLogger.Info($"[CreateNode] 設定 Code Block 值: {val}");
-                        var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, "Code", val);
-                        _dynamoModel.ExecuteCommand(updateCmd);
-                    }
-                    MCPLogger.Info($"[CreateNode] Code Block 節點創建完成");
-                    
-                    // 處理預覽狀態
-                    if (n["preview"] != null)
-                    {
-                        bool isPreview = n["preview"].ToObject<bool>();
-                        if (!isPreview)
-                        {
-                            var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, "IsVisible", "false");
-                            _dynamoModel.ExecuteCommand(updateCmd);
-                            MCPLogger.Info($"[CreateNode] 節點 {dynamoGuid} 預覽已隱藏");
-                        }
-                    }
-                    return; // 提早返回
-                }
-
-                // === 處理原生/其他節點 ===
-                string finalFullName = nodeName;
-                bool isExplicitOverload = false;
-                string ovId = n["overload"]?.ToString();
-
-                if (_commonNodesCache == null) LoadCommonNodesCache();
-                var commonMatch = _commonNodesCache?.FirstOrDefault(cn => cn["name"]?.ToString() == nodeName);
-                
-                if (commonMatch != null)
-                {
-                    finalFullName = commonMatch["fullName"]?.ToString();
-                    if (!string.IsNullOrEmpty(ovId))
-                    {
-                        var overloads = commonMatch["overloads"] as JArray;
-                        var target = overloads?.FirstOrDefault(o => o["id"]?.ToString() == ovId);
-                        if (target != null)
-                        {
-                            finalFullName = target["fullName"]?.ToString();
-                            isExplicitOverload = true;
-                        }
-                    }
-                }
-
-                string creationName = finalFullName;
-                if (!isExplicitOverload && creationName.Contains("@") && !Guid.TryParse(creationName, out _))
-                {
-                    creationName = creationName.Split('@')[0];
-                }
-
-                MCPLogger.Info($"[CreateNode] creationName: {creationName}, GUID: {dynamoGuid}");
-                MCPLogger.Info($"[CreateNode] 創建原生節點: {creationName}");
-                
-                var nativeCmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, creationName, x, y, false, false);
-                _dynamoModel.ExecuteCommand(nativeCmd);
+            // === Code Block ===
+            if (nodeName == "Number" || nodeName == "Code Block")
+            {
+                var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
+                _dynamoModel.ExecuteCommand(cmd);
                 
                 if (n["value"] != null)
                 {
-                    string propertyName = GetValuePropertyName(creationName);
-                    if (!string.IsNullOrEmpty(propertyName))
-                    {
-                        var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, propertyName, n["value"].ToString());
-                        _dynamoModel.ExecuteCommand(updateCmd);
-                    }
+                    string val = n["value"].ToString();
+                    if (!val.EndsWith(";")) val += ";";
+                    var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, "Code", val);
+                    _dynamoModel.ExecuteCommand(updateCmd);
                 }
+                
+                HandlePreview(n, dynamoGuid);
+                return;
+            }
 
-                // 處理預覽狀態
-                if (n["preview"] != null)
+            // === Native Nodes ===
+            string finalFullName = nodeName;
+            bool isExplicitOverload = false;
+            string ovId = n["overload"]?.ToString();
+
+            if (_commonNodesCache == null) LoadCommonNodesCache();
+            var commonMatch = _commonNodesCache?.FirstOrDefault(cn => cn["name"]?.ToString() == nodeName);
+            
+            if (commonMatch != null)
+            {
+                finalFullName = commonMatch["fullName"]?.ToString();
+                if (!string.IsNullOrEmpty(ovId))
                 {
-                    bool isPreview = n["preview"].ToObject<bool>();
-                    if (!isPreview)
+                    var overloads = commonMatch["overloads"] as JArray;
+                    var target = overloads?.FirstOrDefault(o => o["id"]?.ToString() == ovId);
+                    if (target != null)
                     {
-                        var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, "IsVisible", "false");
-                        _dynamoModel.ExecuteCommand(updateCmd);
-                        MCPLogger.Info($"[CreateNode] 節點 {dynamoGuid} 預覽已隱藏");
+                        finalFullName = target["fullName"]?.ToString();
+                        isExplicitOverload = true;
                     }
                 }
             }
-            catch (Exception ex)
+
+            string creationName = finalFullName;
+            if (!isExplicitOverload && creationName.Contains("@") && !Guid.TryParse(creationName, out _))
             {
-                MCPLogger.Error($"Error in CreateNode: {ex.Message}");
-                MCPLogger.Error($"StackTrace: {ex.StackTrace}");
+                creationName = creationName.Split('@')[0];
+            }
+
+            MCPLogger.Info($"[CreateNode] Executing CreateNodeCommand: {creationName}");
+            var nativeCmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, creationName, x, y, false, false);
+            _dynamoModel.ExecuteCommand(nativeCmd);
+            
+            if (n["value"] != null)
+            {
+                string propertyName = GetValuePropertyName(creationName);
+                if (!string.IsNullOrEmpty(propertyName))
+                {
+                    var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, propertyName, n["value"].ToString());
+                    _dynamoModel.ExecuteCommand(updateCmd);
+                }
+            }
+
+            HandlePreview(n, dynamoGuid);
+        }
+
+        private void HandlePreview(JToken n, Guid guid)
+        {
+            if (n["preview"] != null)
+            {
+                bool isPreview = n["preview"].ToObject<bool>();
+                if (!isPreview)
+                {
+                    var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, guid, "IsVisible", "false");
+                    _dynamoModel.ExecuteCommand(updateCmd);
+                }
             }
         }
 
@@ -232,43 +236,17 @@ namespace DynamoMCPListener
 
         private void CreateConnection(JToken c)
         {
-            try
-            {
-                string fromIdStr = c["from"]?.ToString();
-                string toIdStr = c["to"]?.ToString();
-                int fromIdx = c["fromPort"]?.ToObject<int>() ?? 0;
-                int toIdx = c["toPort"]?.ToObject<int>() ?? 0;
+            // Removed try-catch to allow bubbling
+            string fromIdStr = c["from"]?.ToString();
+            string toIdStr = c["to"]?.ToString();
+            int fromIdx = c["fromPort"]?.ToObject<int>() ?? 0;
+            int toIdx = c["toPort"]?.ToObject<int>() ?? 0;
 
-                MCPLogger.Info($"[CreateConnection] 開始創建連線: {fromIdStr}[{fromIdx}] -> {toIdStr}[{toIdx}]");
-
-                // 嘗試從映射表解析 GUID，如果失敗則直接解析字串
-                Guid fromId;
-                if (!_nodeIdMap.TryGetValue(fromIdStr, out fromId))
-                {
-                    fromId = Guid.Parse(fromIdStr); // 如果不在映射表中，嘗試直接解析
-                }
-                
-                Guid toId;
-                if (!_nodeIdMap.TryGetValue(toIdStr, out toId))
-                {
-                    toId = Guid.Parse(toIdStr);
-                }
-                
-                MCPLogger.Info($"[CreateConnection] 解析後的 GUID: {fromId} -> {toId}");
-
-                MCPLogger.Info($"[CreateConnection] 執行 MakeConnectionCommand - Begin");
-                _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(fromId, fromIdx, PortType.Output, DynamoModel.MakeConnectionCommand.Mode.Begin));
-                
-                MCPLogger.Info($"[CreateConnection] 執行 MakeConnectionCommand - End");
-                _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(toId, toIdx, PortType.Input, DynamoModel.MakeConnectionCommand.Mode.End));
-                
-                MCPLogger.Info($"[CreateConnection] 連線創建完成");
-            }
-            catch (Exception ex)
-            {
-                MCPLogger.Error($"[CreateConnection] 創建連線失敗: {ex.Message}");
-                MCPLogger.Error($"StackTrace: {ex.StackTrace}");
-            }
+            if (!_nodeIdMap.TryGetValue(fromIdStr, out Guid fromId)) fromId = Guid.Parse(fromIdStr);
+            if (!_nodeIdMap.TryGetValue(toIdStr, out Guid toId)) toId = Guid.Parse(toIdStr);
+            
+            _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(fromId, fromIdx, PortType.Output, DynamoModel.MakeConnectionCommand.Mode.Begin));
+            _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(toId, toIdx, PortType.Input, DynamoModel.MakeConnectionCommand.Mode.End));
         }
 
         private void LoadCommonNodesCache()
@@ -279,7 +257,7 @@ namespace DynamoMCPListener
                 string jsonPath = System.IO.Path.Combine(packageRoot, "common_nodes.json");
                 if (System.IO.File.Exists(jsonPath))
                     _commonNodesCache = JArray.Parse(System.IO.File.ReadAllText(jsonPath));
-            } catch { }
+            } catch { } // Safe suppression for cache loading
         }
     }
 }

@@ -3,19 +3,19 @@
 
 ## 📂 專案結構
 
-- **`mcp_config.template.jsonc`**: **[配置模板]** 帶繁體中文註解的配置範本，使用者應編輯此檔案。
-- **`mcp_config.json`**: **[自動生成]** 由模板自動轉換的純 JSON 設定檔，程式讀取使用。
-- `docs/CONFIG_GUIDE.md`: **[配置指南]** 詳細說明如何修改配置與自動部署機制。
-- `server.py`: 主要的 MCP 伺服器，定義 AI 調用的工具集 (Tools)。
+- **`bridge/`**: **[核心橋接]** 存放通訊與工具邏輯。
+  - `python/server.py`: 主要 MCP 處理器與 WebSocket 伺服器。
+  - `node/index.js`: Stdio-to-WS 橋接器（供 AI Client 調用）。
+- **`mcp_config.json`**: 中心化配置文件。
 - `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
 - `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。
 - `domain/`: **[SOP 知識庫]** 標準操作程序與故障排除指南。
-- `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。
+- `tests/`: 驗證、效能測試、功能檢查。
 - `examples/`: 提供給開發者的基準範例。
 - `image/`: **[視覺化產出]** 存放 `/image` 指令產出的腳本分析圖表與技術文檔。
 - `deploy.ps1`: **[一鍵部署]** 編譯並安裝插件至 Dynamo 套件路徑。
-- **`GEMINI.md`**: **[AI 必讀]** 完整的操作規範與節點創建方法。
-- **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例與故障排除指南。
+- **`GEMINI.md`**: **[AI 必讀]** 指導規範。
+- **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例。
 
 ## 🧠 AI 協作指令
 
@@ -48,20 +48,11 @@
 
 > **📋 完整檢查流程請參考**：[`domain/startup_checklist.md`](domain/startup_checklist.md)
 
-- **強制執行分析**：AI 在進行任何實質作業（放置節點、連線、載入腳本）前，**必須**先執行 `analyze_workspace` 工具。
-- **幽靈連線 (Ghost Listener) 偵測法**：
-    - **定義**：Revit 未關閉但重開了 Dynamo 視窗。
-    - **特徵**：AI 執行指令回報成功，但使用者回報「沒看到東西」或「工作區是空的」。
-    - **判定準則**：若 `analyze_workspace` 回傳的 `nodeCount > 1`（除了連線節點），但使用者表示是新開的空白檔案，**判定為幽靈連線**。
-    - **處理邏輯**：AI 必須強制停止當前操作，引導使用者執行：`StopMCPServer` -> 刪除 Stop 節點 -> `StartMCPServer`。
-    - **完整修復流程**：參考 [`domain/troubleshooting.md#幽靈連線`](domain/troubleshooting.md#幽靈連線)
-- **SessionId 變動感知**：
-    - 若 `sessionId` 與前次記錄不符，表示 Dynamo 伺服器已重新實例化。
-    - AI 必須重置內部 `_nodeIdMap` 快取，避免使用舊的節點 GUID。
-- **強制回報**：每次對話開始或環境變動後，**必須**主動回報：
-    - `Workspace Name`: 當前檔案名稱。
-    - `Node Count`: 當前節點數。
-    - `Session State`: 確認 Session ID 是否延續或為新實例。
+- **強制執行分析**：AI 在進行任何實質作業前，**必須**先執行 `analyze_workspace` 工具。在 WebSocket 方案下，這將驗證持久連線是否建立。
+- **幽靈連線徹底修復**：
+    - WebSocket 方案透過持久性 TCP 連線解決了幽靈連線問題。若連線中斷，伺服器會立即感知並清除 Session。
+- **強制回報**：每次連線建立或環境變動後，AI 會收到：
+    - `Workspace FileName`: 確認當前開啟的檔案。
 
 **相關文件**：
 - 📋 [啟動檢查清單](domain/startup_checklist.md) - 標準化 AI 初始化流程
@@ -76,51 +67,74 @@
 > **最後更新**: 2026-01-11 09:52 (GMT+8)  
 > **提煉來源**: 多次 Dynamo 節點創建失敗與成功案例的總結
 
-### 🎯 核心教訓 #1：Code Block 是唯一可靠的節點創建方法
+### 🎯 核心教訓 #1：節點創建策略 (Node Creation Strategy)
 
-**背景問題**：  
-早期嘗試直接使用 `Point.ByCoordinates`、`Line.ByStartPointEndPoint` 等節點名稱創建節點時，總是失敗或產生不可預期的結果。
+> **最後更新**: 2026-01-19  
+> **重要變更**: 允許使用原生節點或 Code Block，根據情境選擇最佳方案。
 
-**根本原因**：  
-Dynamo API 的 `CreateNodeCommand` 無法直接創建帶參數的幾何節點。這是 API 設計限制，並非 MCP 實作問題。
+**核心行為規範**：
+- ✅ **簡單幾何**: 使用單一 Code Block（一次性計算）
+- ✅ **複雜流程**: 使用原生節點 + 連線（視覺化邏輯）
+- ✅ **必須使用正確的 JSON 格式**：`"name"` 欄位 + 直接座標值
 
-**黃金法則**：
-| 規則 | 說明 |
-|:---|:---|
-| **节点名稱** | 永遠使用 `"Number"` (不是 "Code Block") |
-| **代碼欄位** | 在 `value` 欄位寫完整的 DesignScript |
-| **語法結尾** | 所有代碼必須以分號 `;` 結尾 |
-| **轉換機制** | `GraphHandler.cs` 會自動將 `"Number"` 轉為 Code Block |
+---
 
-**實戰模板**：
+#### 🛤️ 選項 A: Code Block 內嵌模式（簡單幾何）
+
+**適用情境**：
+- 單一幾何物件（一條線、一個點）
+- 不需要視覺化中間步驟
+- 快速原型
+
+**實戰模板**:
 ```json
 {
   "nodes": [{
-    "id": "unique_id",
+    "id": "line_01",
     "name": "Number",
-    "value": "Geometry.Method(params);",
+    "value": "Line.ByStartPointEndPoint(Point.ByCoordinates(0,0,0), Point.ByCoordinates(100,100,100));",
     "x": 300, "y": 300
   }],
   "connectors": []
 }
 ```
 
+**優點**: 簡潔、成功率 100%  
+**缺點**: 無法視覺化流程
+
 ---
 
-### 🚫 核心教訓 #2：避免「分散式節點 + 連線」反模式
+#### 🛤️ 選項 B: 原生節點模式（複雜流程）
 
-**失敗模式**：  
-試圖創建多個 `Number` 節點分別存放 X、Y、Z 值，再透過 `connectors` 連接到 `Point.ByCoordinates` 節點。
+**適用情境**：
+- 需要視覺化中間步驟
+- 多個節點組成的流程
+- 需要調試或修改參數
 
-**為何失敗**：
-- Dynamo API 無法在創建時同步處理節點與連線的依賴關係
-- 會導致「部分節點存在但連線失敗」的殭屍狀態
-
-**正確做法**：  
-將所有參數內嵌於單一 Code Block 的 DesignScript 代碼中：
-```python
-value = "Line.ByStartPointEndPoint(Point.ByCoordinates(0,0,0), Point.ByCoordinates(100,100,100));"
+**實戰模板**:
+```json
+{
+  "nodes": [
+    {"id": "num_x", "name": "Number", "value": "0", "x": 0, "y": 0},
+    {"id": "num_y", "name": "Number", "value": "0", "x": 0, "y": 50},
+    {"id": "num_z", "name": "Number", "value": "0", "x": 0, "y": 100},
+    {"id": "pt1", "name": "Point.ByCoordinates", "x": 300, "y": 50}
+  ],
+  "connectors": [
+    {"from": "num_x", "to": "pt1", "fromIndex": 0, "toIndex": 0},
+    {"from": "num_y", "to": "pt1", "fromIndex": 0, "toIndex": 1},
+    {"from": "num_z", "to": "pt1", "fromIndex": 0, "toIndex": 2}
+  ]
+}
 ```
+
+**關鍵格式要求** ⚠️：
+1. **必須使用 `"name"` 欄位** (不是 `"type"`)
+2. **座標直接寫在節點中** (不要用 `"inputs"` 物件)
+3. **參數值用 Number 節點 + connectors**
+
+**優點**: 視覺化清晰、易於調試  
+**缺點**: JSON 較長
 
 ---
 
@@ -161,8 +175,8 @@ THEN 判定為幽靈連線
 
 **強制修復流程**：
 1. `StopMCPServer` (斷開舊連線)
-2. 手動刪除 Stop 節點
-3. `StartMCPServer` (重新建立連線)
+2. 重啟 Dynamo 以清除殘留狀態
+3. 重新連線
 
 **預防措施**：  
 每次對話開始時，強制執行 `analyze_workspace` 並回報：
@@ -264,15 +278,22 @@ AI 在執行 `/image` 指令時，曾經無法正確取得檔名 (顯示為 Home
 
 ### 🛡️ 自我審查清單 (Pre-Flight Checklist)
 
-執行任何節點創建指令前，AI 必須檢查：
+#### 通用檢查 (所有軌道)
 
-- [ ] 節點名稱是否為 `"Number"` (不是 "Code Block")?
-- [ ] `value` 欄位的代碼是否以 `;` 結尾?
-- [ ] 若涉及 3D 幾何，是否明確指定 X、Y、Z 三個參數?
-- [ ] 是否已執行 `analyze_workspace` 確認當前狀態?
-- [ ] SessionId 是否與前次一致 (避免幽靈連線)?
-- [ ] 是否有現成腳本可復用 (查詢 `get_script_library` 與 `tests/`)?
-- [ ] 產出物放置路徑是否符合規範 (嚴禁放根目錄)?
+執行任何節點創建前，AI 必須檢查：
+
+- [ ] 已執行 `analyze_workspace` 確認環境狀態
+- [ ] SessionId 是否與前次一致 (避免幽靈連線)
+- [ ] 是否有現成腳本可復用 (查詢 `get_script_library`)
+- [ ] 產出物放置路徑是否符合規範 (嚴禁放根目錄)
+- [ ] 已根據決策矩陣選擇適當軌道 (參考核心教訓 #1)
+
+#### 軌道 A 專屬檢查
+
+- [ ] 節點名稱是否為 `"Number"` (不是 `"Code Block"`)
+- [ ] `value` 欄位代碼是否以 `;` 結尾
+- [ ] 若涉及 3D 幾何，是否明確指定 X、Y、Z 三個參數
+- [ ] 代碼語法是否符合 DesignScript 規範
 
 **故障處理原則**：
 ```
@@ -284,85 +305,85 @@ THEN 停止重複嘗試
 
 ---
 
-### 📌 總結：三大不可違背的鐵律
+### ⛓️ 核心教訓 #10：原生節點連線與預覽控制 (Native Node Connections & Preview)
 
-1. **Code Block 至上**：所有幾何創建必須透過 `"Number"` 節點 + DesignScript
-2. **避免分散式節點**：參數內嵌於代碼，不依賴 `connectors`
-3. **強制環境檢查**：每次操作前執行 `analyze_workspace`，偵測幽靈連線
+> **最後更新**: 2026-01-20
+> **重要發現**: 確保原生節點「第一次就成功」的三大要素。
 
-**關鍵文件參考**：
-- 節點簽名定義：`DynamoViewExtension/common_nodes.json`
-- 腳本庫目錄：`DynamoScripts/*.json`
-- 快速參考：`QUICK_REFERENCE.md`
+**1. 連線欄位鐵律**
+- **錯誤**: `fromIndex`, `toIndex` (無效欄位)。
+- **正確**: 必須使用 **`fromPort`** 與 **`toPort`** (0-indexed)。
 
----
+**2. 3D 強制轉向 (Overload Control)**
+- 許多節點 (如 `Point.ByCoordinates`) 預設為 2D。
+- **解決方案**: 在 JSON 中明確加入 `"overload": "3D"`，確保 Z 軸埠位可用。
 
-### 🔧 核心教訓 #9：原生節點自動擴展的三大支柱
+**3. 清晰度控制 (Preview Management)**
+- **問題**: 中間過程的幾何體 (如點、原始球體) 會遮擋最終布林運算結果。
+- **解決方案**: 
+  - 中間節點加入 `"preview": false`。
+  - 最終結果節點加入 `"preview": true`。
 
-> **最後更新**: 2026-01-13 20:33 (GMT+8)  
-> **提煉來源**: 成功實現 Cuboid + Sphere + Solid.Difference 完整布林運算
-
-**背景問題**：  
-嘗試創建帶參數的原生節點（如 `Cuboid.ByLengths`）時，輔助 Number 節點未生成或連線失敗。
-
-#### 支柱 1：跨語言 ID 映射機制 (ID Mapping)
-
-**問題根源**：Python 端使用字串 ID（`"cube_width_123"`），C# 端需要 GUID。
-
-**解決方案**：在 `GraphHandler.cs` 維護 `Dictionary<string, Guid>` 映射表。
-
-**實作檢查點**：
-- ✅ 創建節點時記錄：`_nodeIdMap[stringId] = dynamoGuid`
-- ✅ 創建連線時查詢：`_nodeIdMap.TryGetValue(fromId, out guid)`
-- ✅ 清空工作區時重置：`_nodeIdMap.Clear()`
-
-#### 支柱 2：節點識別的優先順序 (Priority Matching)
-
-**問題根源**：當 `nodeName == "Number"` 時，若先查詢 metadata 會導致錯誤解析。
-
-**黃金規則**：
-| 順序 | 檢查對象 | 處理方式 |
-|:---:|:---|:---|
-| 1️⃣ | `"Number"` 或 `"Code Block"` | 立即創建 Code Block 並 `return` |
-| 2️⃣ | 原生節點（有 metadata） | 查詢 `_commonNodesCache` 解析 fullName |
-| 3️⃣ | 其他節點 | 使用 `nodeName` 直接創建 |
-
-**反模式**：絕對不可先查 metadata 再判斷是否為 Code Block！
-
-#### 支柱 3：Debug 日誌與錯誤處理 (Logging)
-
-**致命錯誤**：空的 `catch {}` 區塊會靜默吞掉關鍵錯誤。
-
-**強制規範**：
-```csharp
-catch (Exception ex) {
-    MCPLogger.Error($"[Function] 錯誤描述: {ex.Message}");
-    MCPLogger.Error($"StackTrace: {ex.StackTrace}");
+**原生布林運算黃金模板**:
+```json
+{
+  "nodes": [
+    {"id": "pt", "name": "Point.ByCoordinates", "overload": "3D", "preview": false, "x": 0, "y": 0},
+    {"id": "res", "name": "Solid.Difference", "preview": true, "x": 500, "y": 0}
+  ],
+  "connectors": [
+    {"from": "pt", "to": "res", "fromPort": 0, "toPort": 0}
+  ]
 }
 ```
 
-**關鍵日誌點**：
-- 節點創建開始 / 完成
-- ID 映射記錄
-- 連線創建的每個階段（Begin / End / Complete）
-- GUID 解析結果
+---
+
+### 📌 總結：當前三大不可違背鐵律
+
+1. **Code Block 唯一論**：所有帶參數的幾何操作必須寫在單一 Code Block 中（除非使用者明確要求原生節點測試）。
+2. **原生連線規範化**：若使用原生節點，必須使用 `fromPort`/`toPort` 欄位並明確指定 `overload` 與 `preview` 狀態。
+3. **強制環境檢查**：每次操作前執行 `analyze_workspace`，偵測幽靈連線與 Session 變動。
+
+**關鍵文件參考**：
+- 📘 雙軌制詳細指南：[`domain/node_creation_strategy.md`](domain/node_creation_strategy.md)
+- 📋 架構分析報告：[`domain/architecture_analysis.md`](domain/architecture_analysis.md)
+- 🔧 節點簽名定義：`DynamoViewExtension/common_nodes.json`
+- 📦 腳本庫目錄：`DynamoScripts/*.json`
+- ⚡ 快速參考：`QUICK_REFERENCE.md`
 
 ---
 
-**自我審查清單 (原生節點自動擴展)**：
 
-執行帶參數的原生節點創建前，AI 必須檢查：
+> **💡 提示**：核心教訓 #9 (原生節點自動擴展的三大支柱) 已於 2026-01-16 合併至**核心教訓 #1 (雙軌制策略)**。  
+> 完整技術細節請參閱：[`domain/node_creation_strategy.md`](domain/node_creation_strategy.md)
 
-- [ ] `server.py` 的自動擴展邏輯是否生成輔助節點？
-- [ ] 輔助節點是否繼承父節點的 `preview` 屬性？
-- [ ] `GraphHandler.cs` 是否維護 ID 映射表？
-- [ ] `CreateNode` 是否優先識別 `"Number"` 節點？
-- [ ] `CreateConnection` 是否有完整的 Debug 日誌？
-- [ ] 所有 `catch` 區塊是否都記錄了錯誤訊息？
 
-**故障排查順序**：
-1. 檢查 Python 端 Debug 輸出，確認輔助節點已生成
-2. 檢查 C# 日誌，確認 ID 映射是否建立
-3. 檢查連線創建日誌，確認 GUID 解析成功
-4. 若仍失敗，檢查 `common_nodes.json` 的埠位定義是否準確
+---
+
+### 🧵 核心教訓 #9：UI 執行緒與 C# 互操作性
+
+> **發現日期**: 2026-01-19
+> **嚴重程度**: CRITICAL (如果違反，會導致所有指令靜默失敗)
+
+**背景問題**：
+Dynamo 的核心是一個 WPF 應用程式。當我們從 WebSocket (背景執行緒) 接收指令並試圖建立節點時，會觸發 `NotifyCollectionChanged` 異常，導致程式崩潰或無反應，但外部 Python 端卻顯示成功。
+
+**強制規範**：
+任何涉及 Dynamo 模型修改的操作 (CreateNode, MakeConnection, DeleteModel)，**必須** 包裝在 `Application.Current.Dispatcher.InvokeAsync` 中。
+
+**C# 實作範本**：
+```csharp
+await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => 
+{
+    // 所有 GraphHandler 的操作必須在此閉包內執行
+    response = _handler.HandleCommand(json);
+});
+```
+
+**AI Debug 指南**：
+1. 若 Python 顯示 `✅ 成功` 但 Dynamo 畫面沒變。
+2. 檢查 `DynamoMCP.log` 是否有 `CollectionChanged` 相關錯誤。
+3. 若有，幾乎 100% 是因為沒有在 UI 執行緒執行。
+
 

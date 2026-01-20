@@ -32,7 +32,12 @@ namespace DynamoMCPListener
         /// <summary>
         /// HTTP Server 監聽埠號 (Default)
         /// </summary>
-        public static int SERVER_PORT = 5050; // Will be overwritten by LoadConfig
+        public static int SERVER_PORT = 5050; 
+
+        /// <summary>
+        /// WebSocket Server 監聽埠號 (Default)
+        /// </summary>
+        public static int WEBSOCKET_PORT = 65535;
         
         /// <summary>
         /// HTTP Server 路徑
@@ -43,6 +48,11 @@ namespace DynamoMCPListener
         /// 完整的 Server URL
         /// </summary>
         public static string ServerUrl => $"http://{SERVER_HOST}:{SERVER_PORT}{SERVER_PATH}";
+
+        /// <summary>
+        /// 完整的 WebSocket URL
+        /// </summary>
+        public static string WebSocketUrl => $"ws://{SERVER_HOST}:{WEBSOCKET_PORT}";
         
         /// <summary>
         /// 日誌檔案路徑
@@ -107,12 +117,14 @@ namespace DynamoMCPListener
                         var serverParams = jobj["server"];
                         if (serverParams["host"] != null) SERVER_HOST = serverParams["host"].ToString();
                         if (serverParams["port"] != null) SERVER_PORT = serverParams["port"].ToObject<int>();
+                        if (serverParams["websocket_port"] != null) WEBSOCKET_PORT = serverParams["websocket_port"].ToObject<int>();
                     }
                 }
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
-                // Ignore errors and use defaults
+                // Ignore errors and use defaults, but log it
+                MCPLogger.Error($"Error loading config: {ex.Message}");
             }
         }
     }
