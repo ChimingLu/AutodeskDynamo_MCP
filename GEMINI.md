@@ -3,19 +3,19 @@
 
 ## 📂 專案結構
 
-- **`mcp_config.template.jsonc`**: **[配置模板]** 帶繁體中文註解的配置範本，使用者應編輯此檔案。
-- **`mcp_config.json`**: **[自動生成]** 由模板自動轉換的純 JSON 設定檔，程式讀取使用。
-- `docs/CONFIG_GUIDE.md`: **[配置指南]** 詳細說明如何修改配置與自動部署機制。
-- `server.py`: 主要的 MCP 伺服器，定義 AI 調用的工具集 (Tools)。
+- **`bridge/`**: **[核心橋接]** 存放通訊與工具邏輯。
+  - `python/server.py`: 主要 MCP 處理器與 WebSocket 伺服器。
+  - `node/index.js`: Stdio-to-WS 橋接器（供 AI Client 調用）。
+- **`mcp_config.json`**: 中心化配置文件。
 - `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
 - `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。
 - `domain/`: **[SOP 知識庫]** 標準操作程序與故障排除指南。
-- `tests/`: 放置所有驗證、效能測試、功能檢查等 Python 腳本。
+- `tests/`: 驗證、效能測試、功能檢查。
 - `examples/`: 提供給開發者的基準範例。
 - `image/`: **[視覺化產出]** 存放 `/image` 指令產出的腳本分析圖表與技術文檔。
 - `deploy.ps1`: **[一鍵部署]** 編譯並安裝插件至 Dynamo 套件路徑。
-- **`GEMINI.md`**: **[AI 必讀]** 完整的操作規範與節點創建方法。
-- **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例與故障排除指南。
+- **`GEMINI.md`**: **[AI 必讀]** 指導規範。
+- **`QUICK_REFERENCE.md`**: **[快速參考]** 常用範例。
 
 ## 🧠 AI 協作指令
 
@@ -305,11 +305,45 @@ THEN 停止重複嘗試
 
 ---
 
+### ⛓️ 核心教訓 #10：原生節點連線與預覽控制 (Native Node Connections & Preview)
+
+> **最後更新**: 2026-01-20
+> **重要發現**: 確保原生節點「第一次就成功」的三大要素。
+
+**1. 連線欄位鐵律**
+- **錯誤**: `fromIndex`, `toIndex` (無效欄位)。
+- **正確**: 必須使用 **`fromPort`** 與 **`toPort`** (0-indexed)。
+
+**2. 3D 強制轉向 (Overload Control)**
+- 許多節點 (如 `Point.ByCoordinates`) 預設為 2D。
+- **解決方案**: 在 JSON 中明確加入 `"overload": "3D"`，確保 Z 軸埠位可用。
+
+**3. 清晰度控制 (Preview Management)**
+- **問題**: 中間過程的幾何體 (如點、原始球體) 會遮擋最終布林運算結果。
+- **解決方案**: 
+  - 中間節點加入 `"preview": false`。
+  - 最終結果節點加入 `"preview": true`。
+
+**原生布林運算黃金模板**:
+```json
+{
+  "nodes": [
+    {"id": "pt", "name": "Point.ByCoordinates", "overload": "3D", "preview": false, "x": 0, "y": 0},
+    {"id": "res", "name": "Solid.Difference", "preview": true, "x": 500, "y": 0}
+  ],
+  "connectors": [
+    {"from": "pt", "to": "res", "fromPort": 0, "toPort": 0}
+  ]
+}
+```
+
+---
+
 ### 📌 總結：當前三大不可違背鐵律
 
-1. **Code Block 唯一論**：所有帶參數的幾何操作必須寫在單一 Code Block 中。
-2. **自動降級已固化**：禁止嘗試任何原生節點連線邏輯。
-3. **強制環境檢查**：每次操作前執行 `analyze_workspace`，偵測幽靈連線與 Session 變動
+1. **Code Block 唯一論**：所有帶參數的幾何操作必須寫在單一 Code Block 中（除非使用者明確要求原生節點測試）。
+2. **原生連線規範化**：若使用原生節點，必須使用 `fromPort`/`toPort` 欄位並明確指定 `overload` 與 `preview` 狀態。
+3. **強制環境檢查**：每次操作前執行 `analyze_workspace`，偵測幽靈連線與 Session 變動。
 
 **關鍵文件參考**：
 - 📘 雙軌制詳細指南：[`domain/node_creation_strategy.md`](domain/node_creation_strategy.md)
