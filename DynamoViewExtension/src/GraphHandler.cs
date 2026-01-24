@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Dynamo.Graph.Nodes;
 using Dynamo.Graph.Connectors;
 using Dynamo.Models;
 using Dynamo.ViewModels;
+using Dynamo.Search;
 using Dynamo.Search.SearchElements;
 using Dynamo.Graph.Nodes.CustomNodes;
 
@@ -75,10 +77,153 @@ namespace DynamoMCPListener
 
                     return JsonConvert.SerializeObject(statusData);
                 } else if (action == "list_nodes") {
-                    // Start of list_nodes implementation
-                    string filter = data["filter"]?.ToString() ?? "";
-                    // Minimal implementation, can be expanded
-                    return "{\"status\": \"ok\", \"nodes\": []}"; 
+                    string filter = data["filter"]?.ToString()?.ToLower() ?? "";
+                    MCPLogger.Info($"[list_nodes] Searching for: {filter}");
+
+                    // Ultimate recursive search for SearchModel/SearchViewModel
+                    string diagPath = MCPConfig.DIAG_FILE_PATH;
+                    string diagDir = System.IO.Path.GetDirectoryName(diagPath);
+                    if (!System.IO.Directory.Exists(diagDir)) System.IO.Directory.CreateDirectory(diagDir);
+                    object searchModel = null;
+                    
+                    try {
+                        List<string> diagLines = new List<string>();
+                        diagLines.Add($"--- Deep Search Start ---");
+
+                        // Helper to find a search-related object in any instance
+                        Func<object, string, object> findSearchObj = (obj, label) => {
+                            if (obj == null) return null;
+                            var type = obj.GetType();
+                            diagLines.Add($"Scanning {label} ({type.Name})...");
+                            
+                            // Check Properties
+                            foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                                try {
+                                    if (p.Name.Contains("Search") || p.PropertyType.Name.Contains("Search")) {
+                                        var val = p.GetValue(obj);
+                                        diagLines.Add($"  Prop Match: {p.Name} (Type: {p.PropertyType.Name}) -> {(val != null ? "FOUND" : "null")}");
+                                        if (val != null && (p.PropertyType.Name.Contains("SearchModel") || p.Name.Contains("SearchModel"))) return val;
+                                        if (val != null && (p.PropertyType.Name.Contains("SearchViewModel") || p.Name.Contains("SearchViewModel"))) {
+                                            // Try to get Model from ViewModel
+                                            var mProp = val.GetType().GetProperty("Model", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                            var mVal = mProp?.GetValue(val);
+                                            if (mVal != null) return mVal;
+                                        }
+                                    }
+                                } catch {}
+                            }
+                            
+                            // Check Fields
+                            foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                                try {
+                                    if (f.Name.Contains("Search") || f.FieldType.Name.Contains("Search")) {
+                                        var val = f.GetValue(obj);
+                                        diagLines.Add($"  Field Match: {f.Name} (Type: {f.FieldType.Name}) -> {(val != null ? "FOUND" : "null")}");
+                                        if (val != null && (f.FieldType.Name.Contains("SearchModel") || f.Name.Contains("SearchModel"))) return val;
+                                    }
+                                } catch {}
+                            }
+                            return null;
+                        };
+
+                        searchModel = findSearchObj(_vm.Model, "Model") ?? findSearchObj(_vm, "VM");
+                        System.IO.File.WriteAllLines(diagPath, diagLines);
+                    } catch (Exception ex) {
+                        System.IO.File.AppendAllText(diagPath, "Fatal Diag Error: " + ex.ToString());
+                    }
+
+                    if (searchModel == null)
+                    {
+                        return "{\"status\": \"error\", \"message\": \"SearchModel could not be located even with deep scan. Check props_diag.txt for clues.\"}";
+                    }
+
+                    // Diagnostic: Scan ALL members of NodeSearchModel since standard names failed
+                    try {
+                        List<string> scanLines = new List<string>();
+                        scanLines.Add($"--- Scanning NodeSearchModel ({searchModel.GetType().FullName}) ---");
+                        
+                        foreach (var p in searchModel.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                            try { scanLines.Add($"  Prop: {p.Name} (Type: {p.PropertyType.Name})"); } catch {}
+                        }
+                        foreach (var f in searchModel.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                            try { scanLines.Add($"  Field: {f.Name} (Type: {f.FieldType.Name})"); } catch {}
+                        }
+                        System.IO.File.AppendAllLines(diagPath, scanLines);
+                    } catch {}
+
+                    // Target logic: Dynamic find collection
+                    IEnumerable<NodeSearchElement> elements = null;
+                    
+                    // Try to find ANY member that is IEnumerable<NodeSearchElement>
+                    foreach (var p in searchModel.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                    {
+                        if (typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(p.PropertyType))
+                        {
+                            try { elements = p.GetValue(searchModel) as IEnumerable<NodeSearchElement>; } catch {}
+                            if (elements != null) break;
+                        }
+                    }
+
+                    if (elements == null)
+                    {
+                        foreach (var f in searchModel.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                        {
+                            if (typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(f.FieldType))
+                            {
+                                try { elements = f.GetValue(searchModel) as IEnumerable<NodeSearchElement>; } catch {}
+                                if (elements != null) break;
+                            }
+                        }
+                    }
+
+                    if (elements == null)
+                    {
+                        return $"{{\"status\": \"error\", \"message\": \"Could not find nodes collection in {searchModel.GetType().Name}. Check props_diag.txt for potential candidates.\"}}";
+                    }
+
+                    var results = elements
+                        .Where(el => string.IsNullOrEmpty(filter) || 
+                                     el.Name.ToLower().Contains(filter) || 
+                                     el.FullName.ToLower().Contains(filter))
+                        .Take(50)
+                        .Select(el => {
+                            // Deep extraction of the real IDENTIFIER for creation
+                            string cName = el.FullName;
+                            try {
+                                var entryProp = el.GetType().GetProperty("Entry", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                var entry = entryProp?.GetValue(el);
+                                if (entry != null) {
+                                    var cNameProp = entry.GetType().GetProperty("CreationName", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    var val = cNameProp?.GetValue(entry)?.ToString();
+                                    if (!string.IsNullOrEmpty(val)) cName = val;
+                                }
+                            } catch {}
+
+                            return new {
+                                name = el.Name,
+                                fullName = el.FullName,
+                                creationName = cName,
+                                description = el.Description,
+                                type = el.GetType().Name
+                            };
+                        }).ToList();
+
+                    // Format display result for AI awareness
+                    var displayLines = new List<string> { $"🔍 搜尋 '{filter}' 找到 {results.Count} 個結果 (僅列出前 50 個):\n" };
+                    foreach (var n in results) {
+                        displayLines.Add($"- **{n.name}**");
+                        displayLines.Add($"  fullName: `{n.fullName}`");
+                        displayLines.Add($"  creationName: `{n.creationName}`");
+                        if (!string.IsNullOrEmpty(n.description)) displayLines.Add($"  說明: {n.description}");
+                        displayLines.Add("");
+                    }
+
+                    return JsonConvert.SerializeObject(new { 
+                        status = "ok", 
+                        count = results.Count,
+                        nodes = results,
+                        display = string.Join("\n", displayLines)
+                    });
                 }
                 
                 // 1. Create Nodes
@@ -92,8 +237,9 @@ namespace DynamoMCPListener
                         }
                         catch (Exception ex)
                         {
-                            string msg = $"[CreateNode Failed] {n["name"]} (ID: {n["id"]}): {ex.Message}";
-                            MCPLogger.Error(msg, ex);
+                            string nodeName = n["name"]?.ToString();
+                            string msg = $"[CreateNode Failed] {nodeName} (ID: {n["id"]}): {ex.Message}";
+                            MCPLogger.Error($"Critical Failure creating node '{nodeName}':", ex);
                             errors.Add(msg);
                         }
                     }
@@ -133,22 +279,21 @@ namespace DynamoMCPListener
 
         private void CreateNode(JToken n)
         {
-            // Removed try-catch to allow bubbling to HandleCommand
             string nodeName = n["name"]?.ToString();
             string nodeIdStr = n["id"]?.ToString();
+            string creationNameOverride = n["creationName"]?.ToString();
             double x = n["x"]?.ToObject<double>() ?? 0;
             double y = n["y"]?.ToObject<double>() ?? 0;
 
-            MCPLogger.Info($"[CreateNode] 開始創建節點: {nodeName} (ID: {nodeIdStr})");
+            MCPLogger.Info($"[CreateNode] 開始處理節點: {nodeName} (ID: {nodeIdStr})");
 
             Guid dynamoGuid = Guid.TryParse(nodeIdStr, out Guid parsedGuid) ? parsedGuid : Guid.NewGuid();
-            
             if (!string.IsNullOrEmpty(nodeIdStr))
             {
                 _nodeIdMap[nodeIdStr] = dynamoGuid;
             }
 
-            // === Code Block ===
+            // === 1. Code Block / Number ===
             if (nodeName == "Number" || nodeName == "Code Block")
             {
                 var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
@@ -166,42 +311,82 @@ namespace DynamoMCPListener
                 return;
             }
 
-            // === Native Nodes ===
-            string finalFullName = nodeName;
-            bool isExplicitOverload = false;
-            string ovId = n["overload"]?.ToString();
+            // === 2. Strategy: Deep Identify & Creation ===
+            string finalCreationName = !string.IsNullOrEmpty(creationNameOverride) ? creationNameOverride : nodeName;
 
-            if (_commonNodesCache == null) LoadCommonNodesCache();
-            var commonMatch = _commonNodesCache?.FirstOrDefault(cn => cn["name"]?.ToString() == nodeName);
-            
-            if (commonMatch != null)
-            {
-                finalFullName = commonMatch["fullName"]?.ToString();
-                if (!string.IsNullOrEmpty(ovId))
+            try {
+                object searchModel = GetSearchModel();
+                if (searchModel != null)
                 {
-                    var overloads = commonMatch["overloads"] as JArray;
-                    var target = overloads?.FirstOrDefault(o => o["id"]?.ToString() == ovId);
-                    if (target != null)
-                    {
-                        finalFullName = target["fullName"]?.ToString();
-                        isExplicitOverload = true;
+                    var currentType = searchModel.GetType();
+                    var elementsProp = currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                                        .FirstOrDefault(p => typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(p.PropertyType));
+                    
+                    var elements = elementsProp?.GetValue(searchModel) as IEnumerable<NodeSearchElement>;
+                    if (elements == null) {
+                        var elementsField = currentType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                                            .FirstOrDefault(f => typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(f.FieldType));
+                        elements = elementsField?.GetValue(searchModel) as IEnumerable<NodeSearchElement>;
+                    }
+
+                    if (elements != null) {
+                        var match = elements.FirstOrDefault(el => el.FullName == nodeName || el.Name == nodeName);
+                        if (match != null) {
+                            // --- DEEP IDENTITY SCAN ---
+                            // We scan match and its potential 'Entry' for anything that looks like a GUID or real creation name
+                            List<object> targets = new List<object> { match };
+                            var entryProp = match.GetType().GetProperty("Entry", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            var entry = entryProp?.GetValue(match);
+                            if (entry != null) targets.Add(entry);
+
+                            bool foundRealId = false;
+                            foreach (var target in targets) {
+                                var t = target.GetType();
+                                // Scan Properties
+                                foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                                    if (p.Name.Contains("Guid") || p.Name.Contains("ID") || p.Name == "CreationName") {
+                                        var val = p.GetValue(target)?.ToString();
+                                        if (!string.IsNullOrEmpty(val) && val != nodeName) {
+                                            finalCreationName = val;
+                                            foundRealId = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (foundRealId) break;
+                                // Scan Fields
+                                foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                                    if (f.Name.Contains("guid") || f.Name.Contains("id") || f.Name == "creationName") {
+                                        var val = f.GetValue(target)?.ToString();
+                                        if (!string.IsNullOrEmpty(val) && val != nodeName) {
+                                            finalCreationName = val;
+                                            foundRealId = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (foundRealId) break;
+                            }
+
+                            if (foundRealId) {
+                                MCPLogger.Info($"[CreateNode] Deep Scan Success: '{nodeName}' -> ID '{finalCreationName}'");
+                            } else {
+                                MCPLogger.Warning($"[CreateNode] Deep Scan found no unique ID for '{nodeName}', using default.");
+                            }
+                        }
                     }
                 }
+            } catch (Exception ex) {
+                MCPLogger.Error($"[CreateNode] Resolution error: {ex.Message}");
             }
 
-            string creationName = finalFullName;
-            if (!isExplicitOverload && creationName.Contains("@") && !Guid.TryParse(creationName, out _))
-            {
-                creationName = creationName.Split('@')[0];
-            }
-
-            MCPLogger.Info($"[CreateNode] Executing CreateNodeCommand: {creationName}");
-            var nativeCmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, creationName, x, y, false, false);
+            MCPLogger.Info($"[CreateNode] Final creationName used: {finalCreationName}");
+            var nativeCmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, finalCreationName, x, y, false, false);
             _dynamoModel.ExecuteCommand(nativeCmd);
             
             if (n["value"] != null)
             {
-                string propertyName = GetValuePropertyName(creationName);
+                string propertyName = GetValuePropertyName(finalCreationName);
                 if (!string.IsNullOrEmpty(propertyName))
                 {
                     var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, propertyName, n["value"].ToString());
@@ -210,6 +395,29 @@ namespace DynamoMCPListener
             }
 
             HandlePreview(n, dynamoGuid);
+        }
+
+        private object GetSearchModel() {
+            try {
+                // In 3.0+, SearchModel is often in SearchViewModel via DynamoViewModel
+                var svmProp = _vm.GetType().GetProperty("SearchViewModel", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (svmProp != null) {
+                    var svmObj = svmProp.GetValue(_vm);
+                    if (svmObj != null) {
+                        var mProp = svmObj.GetType().GetProperty("Model", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (mProp != null) return mProp.GetValue(svmObj);
+                    }
+                }
+
+                // Fallback to Scan
+                foreach (var p in _dynamoModel.GetType().GetProperties(BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Instance)) {
+                    if (p.PropertyType.Name.Contains("SearchModel")) return p.GetValue(_dynamoModel);
+                }
+                foreach (var f in _dynamoModel.GetType().GetFields(BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Instance)) {
+                    if (f.FieldType.Name.Contains("SearchModel")) return f.GetValue(_dynamoModel);
+                }
+            } catch {}
+            return null;
         }
 
         private void HandlePreview(JToken n, Guid guid)

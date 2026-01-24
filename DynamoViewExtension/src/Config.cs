@@ -60,6 +60,12 @@ namespace DynamoMCPListener
         public static string LOG_FILE_PATH => System.IO.Path.Combine(
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), 
             "Dynamo", "MCP", "DynamoMCP.log");
+
+        /// <summary>
+        /// 診斷檔案路徑 (用於 list_nodes 等複雜搜尋的除錯)
+        /// </summary>
+        public static string DIAG_FILE_PATH => System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(LOG_FILE_PATH), "props_diag.txt");
         
         /// <summary>
         /// Common Nodes 檔案名稱

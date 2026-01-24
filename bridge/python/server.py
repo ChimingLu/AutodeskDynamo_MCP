@@ -265,6 +265,21 @@ class MCPBridgeServer:
                 "destructiveHint": True
             },
             {
+                "name": "search_nodes",
+                "description": "在 Dynamo 庫中搜尋節點。這會返回節點的 fullName，可用於 execute_dynamo_instructions。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "搜尋關鍵字（例如 'Room', 'Solid', 'Point'）"
+                        }
+                    },
+                    "required": ["query"]
+                },
+                "readOnlyHint": True
+            },
+            {
                 "name": "get_mcp_guidelines",
                 "description": "取得規範內容。",
                 "inputSchema": {"type": "object", "properties": {}},
@@ -287,6 +302,8 @@ class MCPBridgeServer:
         try:
             if name == "execute_dynamo_instructions":
                 return await execute_dynamo_instructions(**args)
+            elif name == "search_nodes":
+                return await search_nodes_async(**args)
             elif name == "analyze_workspace":
                 return await analyze_workspace()
             elif name == "get_graph_status":
@@ -352,6 +369,33 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
         response = await ws_manager.send_command_async(session_id, json_data)
         return f"✅ 成功" if response.get("status") == "ok" else f"❌ 失敗: {response.get('message')}"
     except Exception as e: 
+        return f"Error: {e}"
+
+async def search_nodes_async(query: str) -> str:
+    with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
+    if not sessions: return "❌ 失敗: 未連線"
+    session_id = sessions[-1]
+    try:
+        data = await ws_manager.send_command_async(session_id, {"action": "list_nodes", "filter": query})
+        if data.get("status") == "error": return f"❌ 搜尋出錯: {data.get('message')}"
+        
+        # If the backend provided a formatted display string, use it
+        if data.get("display"):
+            return data["display"]
+
+        nodes = data.get("nodes", [])
+        if not nodes: return f"🔍 搜尋 '{query}': 找不到任何節點。"
+        
+        # Fallback formatting
+        res = [f"🔍 搜尋 '{query}' 找到 {data.get('count', 0)} 個結果 (僅列出前 50 個):\n"]
+        for n in nodes:
+            res.append(f"- **{n['name']}**")
+            res.append(f"  fullName: `{n['fullName']}`")
+            if n.get('creationName'): res.append(f"  creationName: `{n['creationName']}`")
+            if n.get('description'): res.append(f"  說明: {n['description']}")
+            res.append("")
+        return "\n".join(res)
+    except Exception as e:
         return f"Error: {e}"
 
 async def analyze_workspace() -> str:

@@ -24,7 +24,9 @@
     },
     "server": {
         "host": "127.0.0.1",
-        "websocket_port": 65535
+        "port": 5050,
+        "websocket_port": 65535,
+        "url_path": "/mcp/"
     },
     "deployment_info": {
         "version": "2.4",
