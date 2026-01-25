@@ -163,7 +163,9 @@ namespace DynamoMCPListener
 
         private bool CheckForStartNode()
         {
-            return _vm.Model.CurrentWorkspace.Nodes.Any(n => n.Name.Contains("StartMCPServer"));
+            // Deprecated: StartMCPServer nodes are no longer used.
+            // Returning false as nodes are removed from workspace.
+            return false;
         }
 
         public void Dispose()

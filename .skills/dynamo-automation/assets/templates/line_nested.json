@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "line_nested",
+            "name": "Number",
+            "value": "Line.ByStartPointEndPoint(Point.ByCoordinates(0,0,0), Point.ByCoordinates(100,100,100));",
+            "x": 300,
+            "y": 300
+        }
+    ],
+    "connectors": []
+}

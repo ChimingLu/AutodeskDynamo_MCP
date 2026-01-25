@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "py_revit_rooms",
+            "name": "Python Script",
+            "pythonCode": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import FilteredElementCollector, BuiltInCategory\n\n# Get active document\ndoc = IN[0]\n\n# Collect all rooms\nrooms = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Rooms).WhereElementIsNotElementType()\n\n# Extract room names\nroom_names = [r.get_Parameter(BuiltInParameter.ROOM_NAME).AsString() for r in rooms]\n\nOUT = room_names",
+            "x": 500,
+            "y": 300
+        }
+    ],
+    "connectors": []
+}

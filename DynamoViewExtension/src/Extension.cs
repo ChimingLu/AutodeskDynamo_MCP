@@ -166,7 +166,9 @@ namespace DynamoMCPListener
     }
 
     /// <summary>
-    /// Keep these for backward compatibility or direct script access, but hide from Library.
+    /// Deprecated: These were used for StartMCPServer/StopMCPServer nodes.
+    /// Nodes have been removed from the library and replaced by the BIM Assistant menu.
+    /// Keeping internal for backward compatibility with scripts if needed.
     /// </summary>
     public static class MCPControls
     {

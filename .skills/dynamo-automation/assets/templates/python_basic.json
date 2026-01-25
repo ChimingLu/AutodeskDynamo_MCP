@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "py_basic",
+            "name": "Python Script",
+            "pythonCode": "# Your Python code here\n# Input: IN[0]\n# Output: OUT\n\nOUT = IN[0]",
+            "x": 500,
+            "y": 300
+        }
+    ],
+    "connectors": []
+}

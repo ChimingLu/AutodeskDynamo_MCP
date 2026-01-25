@@ -1,0 +1,26 @@
+{
+    "nodes": [
+        {
+            "id": "c1",
+            "name": "Code Block",
+            "value": "\"C:/temp/data.xlsx\";",
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": "c2",
+            "name": "Code Block",
+            "value": "Data.ImportExcel(path, \"Sheet1\", true, true);",
+            "x": 300,
+            "y": 0
+        }
+    ],
+    "connectors": [
+        {
+            "from": "c1",
+            "to": "c2",
+            "fromPort": 0,
+            "toPort": 0
+        }
+    ]
+}

@@ -1,0 +1,17 @@
+{
+    "nodes": [
+        {
+            "id": "sphere_preview",
+            "name": "Sphere.ByCenterPointRadius",
+            "params": {
+                "centerPoint": "Point.ByCoordinates(0,0,0);",
+                "radius": 50
+            },
+            "x": 500,
+            "y": 300,
+            "preview": false,
+            "_comment": "Intermediate geometry, hidden for boolean operations"
+        }
+    ],
+    "connectors": []
+}

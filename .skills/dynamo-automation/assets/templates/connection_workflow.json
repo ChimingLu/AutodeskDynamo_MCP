@@ -1,0 +1,25 @@
+{
+    "nodes": [
+        {
+            "id": "selector",
+            "name": "Select Model Element",
+            "x": 100,
+            "y": 300
+        },
+        {
+            "id": "py_script",
+            "name": "Python Script",
+            "pythonCode": "# Process selected element\nelement = IN[0]\n\n# Extract element properties\nproperties = {\n    'Name': element.Name,\n    'Id': element.Id.IntegerValue,\n    'Category': element.Category.Name\n}\n\nOUT = properties",
+            "x": 500,
+            "y": 300
+        }
+    ],
+    "connectors": [
+        {
+            "from": "selector",
+            "to": "py_script",
+            "fromPort": 0,
+            "toPort": 0
+        }
+    ]
+}

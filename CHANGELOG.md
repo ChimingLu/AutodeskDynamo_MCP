@@ -1,5 +1,17 @@
 # 穩定性改善變更日誌
 
+## v3.1 (2026-01-25) - UI 現代化與選單整合
+### 🔥 重大變更：廢止手動控制節點
+- **移除 `StartMCPServer` 與 `StopMCPServer` 節點**：
+  - 完全棄用畫布節點控制模式，改由 Dynamo 頂部選單 `BIM Assistant` 統一管理。
+  - 理由：解決節點被誤刪除或重複放置導致的連線不穩定問題。
+- **全新選單介面**：
+  - 新增 `Connect to MCP Server` 開關。
+  - 新增 `Auto-Connect on Startup` 功能，確保外掛載入時自動建立連線。
+  - 新增 `Status` 即時狀態顯示。
+- **文檔全面更新**：
+  - 已更新 `GEMINI.md`, `QUICK_REFERENCE.md`, `README_EN.md` 以及所有 SOP 文件。
+
 ## v2.5 (2026-01-05) - 連線生命週期與幽靈監聽器解決方案
 
 ### 🔥 核心突破：幽靈監聽器 (Ghost Listener) 解決方案

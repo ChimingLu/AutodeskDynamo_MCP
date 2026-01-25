@@ -49,6 +49,105 @@ graph TD
 
 ---
 
+## ✨ 核心功能
+
+### 1. 全類型節點放置 (Universal Node Placement)
+- ✅ **原生節點**：所有 Dynamo 內建節點
+- ✅ **Zero-Touch DLL**：外掛套件（Archi-lab, BimorphNodes 等）
+- ✅ **Custom Nodes/DYF**：自定義節點（Clockwork, Data-Shapes 等）
+- 🔧 **技術**：Deep Scan 機制提取內部 `CreationName`（GUID 或完整簽名）
+
+### 2. Python Script 自動化 (Python Script Automation)
+- ✅ **節點創建**：自動放置 Python Script 節點
+- ✅ **代碼注入**：將 Python 代碼寫入節點並確保 UI 顯示
+- ✅ **引擎設置**：自動切換至 CPython3 引擎
+- 🔧 **技術**：純反射三重保障機制（參閱 [`domain/python_script_automation.md`](domain/python_script_automation.md)）
+
+### 3. 節點連線 (Node Connection)
+- ✅ **自動連線**：程式化建立節點間的連線
+- ✅ **ID 映射**：跨語言字串 ID → GUID 轉換
+- ✅ **預覽控制**：設定中間節點隱藏、最終結果顯示
+- 🔧 **技術**：跨語言 ID 映射機制（參閱 [`domain/node_connection_workflow.md`](domain/node_connection_workflow.md)）
+
+---
+
+## 🤖 AI Agent 使用指南
+
+本專案透過 **Model Context Protocol (MCP)** 提供 AI 自動化介面，支援多種 AI Agent。
+
+### 支援的 AI Agent
+
+- ✅ **Antigravity** (Google Deepmind)
+- ✅ **Claude Desktop** (Anthropic)
+- ✅ **Gemini CLI** (Google)
+- ✅ 任何支援 MCP 的 AI Agent
+
+### 快速開始（適用所有 AI）
+
+#### 1. 配置 MCP 連線
+
+**Antigrav**ity / Gemini CLI**:
+```json
+"dynamo-mcp": {
+  "command": "node",
+  "args": ["絕對路徑/bridge/node/index.js"]
+}
+```
+
+**Claude Desktop**:
+```json
+"dynamo-mcp": {
+  "command": "node",
+  "args": ["絕對路徑\\bridge\\node\\index.js"]
+}
+```
+
+#### 2. 使用 AI Guide
+
+**通用文檔**（適用所有 AI Agent）：
+- 📘 [快速開始指南](docs/ai-guide/quick-start.md) - AI 操作 Dynamo 的完整指引
+- 📘 [模板參考](docs/ai-guide/templates.md) - 7 個即用 JSON 模板說明
+
+**技術文檔**（深入細節）：
+- 📋 [節點創建策略](domain/node_creation_strategy.md)
+- 📋 [Python Script 自動化](domain/python_script_automation.md)
+- 📋 [節點連線工作流程](domain/node_connection_workflow.md)
+
+**如何使用**：
+```
+# 告訴 AI 參考文檔
+"請參考 docs/ai-guide/quick-start.md 來創建 Dynamo 節點"
+```
+
+#### 3. 可用的 MCP 工具
+
+- `execute_dynamo_instructions` - 創建節點與連線
+- `analyze_workspace` - 分析工作區狀態
+- `list_available_nodes` - 搜尋可用節點
+- `save_to_library` / `load_script_from_library` - 腳本庫管理
+- `clear_workspace` - 清除工作區
+
+### Antigravity 專屬功能（可選）
+
+Antigravity 用戶可安裝 Skill 以獲得自動觸發功能：
+
+**符號連結方式**（推薦開發者）：
+```powershell
+New-Item -ItemType SymbolicLink `
+  -Path "$env:USERPROFILE\.gemini\antigravity\skills\dynamo-automation" `
+  -Target "C:\Users\LU\AI\AutodeskDynamo_MCP\.skills\dynamo-automation"
+```
+
+**手動複製方式**：
+```powershell
+Copy-Item -Recurse ".skills\dynamo-automation" `
+  "$env:USERPROFILE\.gemini\antigravity\skills\"
+```
+
+安裝後，Antigravity 會自動識別 Dynamo 相關請求並載入專業指引。
+
+---
+
 ## 🛠️ 安裝與部署
 
 1.  **執行部署**:

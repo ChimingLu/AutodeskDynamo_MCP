@@ -4,9 +4,9 @@
 - **MCP Bridge (Node.js)**: `ws://127.0.0.1:65296` (用於 MCP 客戶端連線)
 - **Dynamo WebSocket**: `ws://127.0.0.1:65535` (C# Extension 專用連線)
 - **關鍵操作庫**: `bridge/python/server.py` (主要調度器)
-- **關鍵節點**:
-    - `StartMCPServer`: 在 Dynamo 中啟動 WebSocket 監聽。
-    - `StopMCPServer`: 手動停止監聽器（用於故障排除）。
+- **控制介面**:
+    - `BIM Assistant Menu`: 透過選單控制 WebSocket 監聽。
+    - `Connect to MCP Server`: 點擊手動連線。
 
 ---
 
@@ -28,7 +28,7 @@
 
 #### 1. 幽靈連線排除 (Anti-Ghosting)
 - **判定準則**：若 `analyze_workspace` 回報有節點，但畫面不可見，即為幽靈連線。
-- **SOP**：`StopMCPServer` -> 重新啟動 Dynamo -> `StartMCPServer`。
+- **SOP**：`BIM Assistant` -> `Disconnect` -> 重新點擊 `Connect`。
 
 #### 2. UI 執行緒 (Dispatcher) 規範
 - 所有 C# 端對圖形的編修 **必須** 在 UI 執行緒執行。

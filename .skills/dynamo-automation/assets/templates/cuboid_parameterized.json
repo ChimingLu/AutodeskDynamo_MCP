@@ -1,0 +1,17 @@
+{
+    "nodes": [
+        {
+            "id": "cuboid_param",
+            "name": "Cuboid.ByLengths",
+            "params": {
+                "width": 100,
+                "length": 50,
+                "height": 30
+            },
+            "x": 500,
+            "y": 300,
+            "preview": true
+        }
+    ],
+    "connectors": []
+}

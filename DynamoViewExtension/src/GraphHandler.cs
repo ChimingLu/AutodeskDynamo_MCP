@@ -63,6 +63,14 @@ namespace DynamoMCPListener
                         y = n.Y
                     }).ToList();
 
+                    var connectors = _dynamoModel.CurrentWorkspace.Connectors.Select(c => new
+                    {
+                        from = c.Start.Owner.GUID.ToString(),
+                        to = c.End.Owner.GUID.ToString(),
+                        fromPort = c.Start.Index,
+                        toPort = c.End.Index
+                    }).ToList();
+
                     var statusData = new
                     {
                         sessionId = _sessionId,
@@ -72,7 +80,9 @@ namespace DynamoMCPListener
                             fileName = _dynamoModel.CurrentWorkspace.FileName
                         },
                         nodeCount = nodes.Count,
-                        nodes = nodes
+                        connectorCount = connectors.Count,
+                        nodes = nodes,
+                        connectors = connectors
                     };
 
                     return JsonConvert.SerializeObject(statusData);
@@ -311,6 +321,75 @@ namespace DynamoMCPListener
                 return;
             }
 
+            // === 1.5 Python Script Injection (Diagnostics & UI-Safe Injection) ===
+            if (nodeName == "Python Script" || nodeName.Contains("PythonScript"))
+            {
+                string[] possibleNames = { "Python Script", "Core.Scripting.Python Script", "PythonScript" };
+                bool created = false;
+                foreach (var nameToTry in possibleNames) {
+                    try {
+                        _dynamoModel.ExecuteCommand(new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, nameToTry, x, y, false, false));
+                        if (_dynamoModel.CurrentWorkspace.Nodes.Any(nd => nd.GUID == dynamoGuid)) {
+                            MCPLogger.Info($"[Python] Node created with name: {nameToTry}");
+                            created = true;
+                            break;
+                        }
+                    } catch {}
+                }
+
+                if (created && n["script"] != null)
+                {
+                    string code = n["script"].ToString();
+                    bool injected = false;
+
+                    // --- Phase 1: Global Reflection for UpdatePythonNodeCommand ---
+                    try {
+                        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                        Type cmdType = null;
+                        foreach (var asm in assemblies) {
+                            cmdType = asm.GetType("Dynamo.Models.DynamoModel+UpdatePythonNodeCommand") ?? 
+                                      asm.GetType("Dynamo.Models.UpdatePythonNodeCommand");
+                            if (cmdType != null) break;
+                        }
+
+                        if (cmdType != null) {
+                            var constructor = cmdType.GetConstructors().FirstOrDefault(c => c.GetParameters().Length >= 2);
+                            if (constructor != null) {
+                                object[] p = constructor.GetParameters().Length == 3 
+                                    ? new object[] { dynamoGuid, code, "CPython3" }
+                                    : new object[] { dynamoGuid, code };
+                                var pyCmd = constructor.Invoke(p) as DynamoModel.RecordableCommand;
+                                _dynamoModel.ExecuteCommand(pyCmd);
+                                MCPLogger.Info($"[Python] Injection SUCCESS via reflected Command from {cmdType.Assembly.FullName}");
+                                injected = true;
+                            }
+                        }
+                    } catch (Exception ex) {
+                        MCPLogger.Warning($"[Python] Command reflection failed: {ex.Message}");
+                    }
+
+                    // --- Phase 2: Dynamic Property & Notification Fallback ---
+                    if (!injected) {
+                        var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(nd => nd.GUID == dynamoGuid);
+                        if (node != null) {
+                            try {
+                                var prop = node.GetType().GetProperty("Script") ?? node.GetType().GetProperty("Code");
+                                if (prop != null) {
+                                    prop.SetValue(node, code);
+                                    var notifyMethod = node.GetType().GetMethod("OnNodeModified", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                                    if (notifyMethod != null) notifyMethod.Invoke(node, new object[] { true });
+                                    MCPLogger.Info($"[Python] Fallback SUCCESS using Dynamic Property + OnNodeModified.");
+                                    injected = true;
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+
+                HandlePreview(n, dynamoGuid);
+                return;
+            }
+
             // === 2. Strategy: Deep Identify & Creation ===
             string finalCreationName = !string.IsNullOrEmpty(creationNameOverride) ? creationNameOverride : nodeName;
 
@@ -444,17 +523,47 @@ namespace DynamoMCPListener
 
         private void CreateConnection(JToken c)
         {
-            // Removed try-catch to allow bubbling
             string fromIdStr = c["from"]?.ToString();
             string toIdStr = c["to"]?.ToString();
             int fromIdx = c["fromPort"]?.ToObject<int>() ?? 0;
             int toIdx = c["toPort"]?.ToObject<int>() ?? 0;
+            string toPortName = c["toPortName"]?.ToString();
 
             if (!_nodeIdMap.TryGetValue(fromIdStr, out Guid fromId)) fromId = Guid.Parse(fromIdStr);
             if (!_nodeIdMap.TryGetValue(toIdStr, out Guid toId)) toId = Guid.Parse(toIdStr);
-            
-            _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(fromId, fromIdx, PortType.Output, DynamoModel.MakeConnectionCommand.Mode.Begin));
-            _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(toId, toIdx, PortType.Input, DynamoModel.MakeConnectionCommand.Mode.End));
+
+            // --- [Optimization: Port Name Fallback] ---
+            var toNode = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(n => n.GUID == toId);
+            if (toNode != null && !string.IsNullOrEmpty(toPortName))
+            {
+                // 嘗試根據名稱尋找輸入埠位
+                var port = toNode.InPorts.FirstOrDefault(p => 
+                    p.Name.Equals(toPortName, StringComparison.OrdinalIgnoreCase));
+                
+                if (port != null)
+                {
+                    if (port.Index != toIdx)
+                    {
+                        MCPLogger.Info($"[Connection] Port mapping fallback: Name '{toPortName}' found at Index {port.Index} (Requested: {toIdx})");
+                    }
+                    toIdx = port.Index;
+                }
+                else
+                {
+                    MCPLogger.Warning($"[Connection] Port Name '{toPortName}' not found on node {toNode.Name}. Falling back to Index {toIdx}.");
+                }
+            }
+
+            // 執行連線指令 (分別執行 Begin 與 End)
+            try
+            {
+                _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(fromId, fromIdx, PortType.Output, DynamoModel.MakeConnectionCommand.Mode.Begin));
+                _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(toId, toIdx, PortType.Input, DynamoModel.MakeConnectionCommand.Mode.End));
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"MakeConnectionCommand Failed ({fromIdStr} -> {toIdStr}): {ex.Message}");
+            }
         }
 
         private void LoadCommonNodesCache()

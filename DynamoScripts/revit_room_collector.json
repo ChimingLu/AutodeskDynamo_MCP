@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "py_room_node",
+            "name": "Python Script",
+            "x": 0,
+            "y": 0,
+            "script": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\n\ndoc = DocumentManager.Instance.CurrentDBDocument\ncollector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Rooms).WhereElementIsNotElementType()\n\nroom_names = [r.get_Parameter(BuiltInParameter.ROOM_NAME).AsString() for r in collector]\nOUT = room_names"
+        }
+    ],
+    "connectors": []
+}

@@ -49,6 +49,105 @@ graph TD
 
 ---
 
+## ✨ Core Features
+
+### 1. Universal Node Placement
+- ✅ **Native Nodes**: All built-in Dynamo nodes
+- ✅ **Zero-Touch DLLs**: External packages (Archi-lab, BimorphNodes, etc.)
+- ✅ **Custom Nodes/DYF**: Custom nodes (Clockwork, Data-Shapes, etc.)
+- 🔧 **Technology**: Deep Scan mechanism extracts internal `CreationName` (GUID or full signature)
+
+### 2. Python Script Automation
+- ✅ **Node Creation**: Automatically place Python Script nodes
+- ✅ **Code Injection**: Inject Python code into nodes with UI synchronization
+- ✅ **Engine Selection**: Automatically switch to CPython3 engine
+- 🔧 **Technology**: Pure reflection triple-guarantee mechanism (see [`domain/python_script_automation_EN.md`](domain/python_script_automation_EN.md))
+
+### 3. Node Connection
+- ✅ **Auto-Connection**: Programmatically create connections between nodes
+- ✅ **ID Mapping**: Cross-language string ID → GUID conversion
+- ✅ **Preview Control**: Hide intermediate nodes, show final results
+- 🔧 **Technology**: Cross-language ID mapping mechanism (see [`domain/node_connection_workflow_EN.md`](domain/node_connection_workflow_EN.md))
+
+---
+
+## 🤖 AI Agent Usage Guide
+
+This project provides an AI automation interface through **Model Context Protocol (MCP)**, supporting multiple AI agents.
+
+### Supported AI Agents
+
+- ✅ **Antigravity** (Google Deepmind)
+- ✅ **Claude Desktop** (Anthropic)
+- ✅ **Gemini CLI** (Google)
+- ✅ Any MCP-compatible AI Agent
+
+### Quick Start (Universal for All AI)
+
+#### 1. Configure MCP Connection
+
+**Antigravity / Gemini CLI**:
+```json
+"dynamo-mcp": {
+  "command": "node",
+  "args": ["absolute/path/to/bridge/node/index.js"]
+}
+```
+
+**Claude Desktop**:
+```json
+"dynamo-mcp": {
+  "command": "node",
+  "args": ["absolute\\path\\to\\bridge\\node\\index.js"]
+}
+```
+
+#### 2. Use AI Guide
+
+**Universal Documentation** (for all AI Agents):
+- 📘 [Quick Start Guide](docs/ai-guide/quick-start.md) - Complete guide for AI to operate Dynamo
+- 📘 [Templates Reference](docs/ai-guide/templates.md) - 7 ready-to-use JSON templates
+
+**Technical Documentation** (in-depth details):
+- 📋 [Node Creation Strategy](domain/node_creation_strategy.md)
+- 📋 [Python Script Automation](domain/python_script_automation_EN.md)
+- 📋 [Node Connection Workflow](domain/node_connection_workflow_EN.md)
+
+**How to Use**:
+```
+# Tell AI to reference documentation
+"Please refer to docs/ai-guide/quick-start.md to create Dynamo nodes"
+```
+
+#### 3. Available MCP Tools
+
+- `execute_dynamo_instructions` - Create nodes and connections
+- `analyze_workspace` - Analyze workspace state
+- `list_available_nodes` - Search available nodes
+- `save_to_library` / `load_script_from_library` - Script library management
+- `clear_workspace` - Clear workspace
+
+### Antigravity-Specific Features (Optional)
+
+Antigravity users can install the Skill for automatic triggering:
+
+**Symbolic Link Method** (recommended for developers):
+```powershell
+New-Item -ItemType SymbolicLink `
+  -Path "$env:USERPROFILE\.gemini\antigravity\skills\dynamo-automation" `
+  -Target "C:\Path\To\AutodeskDynamo_MCP\.skills\dynamo-automation"
+```
+
+**Manual Copy Method**:
+```powershell
+Copy-Item -Recurse ".skills\dynamo-automation" `
+  "$env:USERPROFILE\.gemini\antigravity\skills\"
+```
+
+After installation, Antigravity will automatically recognize Dynamo-related requests and load specialized guidance.
+
+---
+
 ## 🛠️ Installation & Deployment
 
 1.  **Run Deployment**:
@@ -73,7 +172,7 @@ graph TD
 > **Prevent Overlapping Features**: When executing `execute_dynamo_instructions`, you can set `clear_before_execute=True` to automatically clear the canvas before drawing new geometry.
 
 > [!IMPORTANT]
-> **Ensure Stable Connection**: Please make sure to place the `MCPControls.StartMCPServer` node in your Dynamo workspace. This ensures the HTTP server operates in the correct context, avoiding connection interruptions due to auto-start mechanism recycling or insufficient permissions.
+> **Ensure Stable Connection**: Please ensure the `BIM Assistant` -> `Connect to MCP Server` is checked in the Dynamo Top Menu. By default, "Auto-Connect on Startup" is enabled to ensure the extension operates in the correct context automatically.
 
 ---
 

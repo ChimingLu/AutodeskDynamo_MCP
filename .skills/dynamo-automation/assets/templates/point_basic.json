@@ -1,0 +1,12 @@
+{
+    "nodes": [
+        {
+            "id": "pt_basic",
+            "name": "Number",
+            "value": "Point.ByCoordinates(0, 0, 0);",
+            "x": 300,
+            "y": 300
+        }
+    ],
+    "connectors": []
+}

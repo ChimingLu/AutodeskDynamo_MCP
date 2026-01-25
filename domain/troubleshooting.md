@@ -26,31 +26,30 @@ Q: Dynamo 視窗是否開啟？
 └─ YES → 繼續下一步
 ```
 
-#### 2. 檢查 StartMCPServer 節點
+#### 2. 檢查連線狀態 (BIM Assistant Menu)
 ```
-Q: 工作區是否已放置 MCPControls.StartMCPServer 節點？
-└─ NO → 從節點庫搜尋並放置該節點
-└─ YES → 檢查節點狀態是否顯示 "Active"
+Q: Dynamo 頂部選單是否顯示 BIM Assistant -> Status: Connected？
+└─ NO → 請點擊 BIM Assistant -> Connect to MCP Server
+└─ YES → 繼續下一步
 ```
 
 #### 3. 檢查連接埠佔用
 **手動檢測**（PowerShell）：
 ```powershell
-netstat -ano | findstr :5050
+netstat -ano | findstr :65535
 ```
 
 **預期結果**：
 - 若顯示 `LISTENING` 且 PID 對應 Dynamo 程序 → 正常
-- 若無任何結果 → StartMCPServer 節點未成功啟動
+- 若無任何結果 → ViewExtension 尚未啟動連線
 - 若 PID 對應其他程序 → Port 被佔用，需終止該程序
 
-#### 4. 強制重啟監聽器
+#### 4. 強制重啟連線
 **修復 SOP**：
-1. 放置 `MCPControls.StopMCPServer` 節點
-2. 確認顯示 "successfully stopped"
-3. **刪除** Stop 節點
-4. 重新放置 `StartMCPServer` 節點
-5. 執行 `analyze_workspace` 驗證
+1. 取消勾選 `BIM Assistant` -> `Connect to MCP Server`
+2. 等待 2 秒，確保日誌顯示 `Connection closed`
+3. 重新勾選 `Connect to MCP Server`
+4. 執行 `analyze_workspace` 驗證
 
 ---
 
@@ -85,21 +84,15 @@ THEN 判定為幽靈連線
 
 **標準 SOP**（強制執行）：
 ```
-1. StopMCPServer
-   └─ 放置 MCPControls.StopMCPServer 節點
-   └─ 確認顯示 "successfully stopped"
+1. 斷開連線
+   └─ 透過選單取消勾選 Connect to MCP Server
 
-2. 清理節點
-   └─ **必須手動刪除** Stop 節點
-   └─ 若有其他舊節點，建議一併清除
+2. 重啟連線
+   └─ 重新勾選 Connect to MCP Server
 
-3. 重新建立連線
-   └─ 放置 MCPControls.StartMCPServer 節點
-   └─ 確認顯示 "Active"
-
-4. 驗證修復
+3. 驗證修復
    └─ 執行 analyze_workspace
-   └─ 確認 nodeCount 恢復為 1
+   └─ 確認 nodeCount 與畫布一致
    └─ 確認 sessionId 已更新
 ```
 

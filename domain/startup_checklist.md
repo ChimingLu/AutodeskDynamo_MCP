@@ -79,12 +79,12 @@ THEN 判定為幽靈連線
 - **Workspace**: [workspaceName]
 - **Node Count**: [nodeCount]
 - **Session**: [是否延續 / 新實例]
-- **StartMCPServer**: [已放置 / 建議放置]
+- **BIM Assistant**: [Connected / Disconnected]
 ```
 
 **格式要求**：
 - 使用 Emoji 與粗體提升可讀性
-- 若偵測到異常（如缺少 StartMCPServer），主動提示
+- 若偵測到斷線，提示使用者透過選單重新連線
 
 ---
 
@@ -106,10 +106,10 @@ THEN 判定為幽靈連線
 
 | 錯誤現象 | 可能原因 | 解決方案 |
 |:---|:---|:---|
-| `Connection Refused` | Dynamo 未啟動或未放置 StartMCPServer 節點 | [troubleshooting.md#連線失敗](troubleshooting.md#連線失敗) |
+| `Connection Refused` | Dynamo 未啟動或選單未連線 | 啟動 Dynamo 並確認選單載入 |
 | `nodeCount` 異常大 | 幽靈連線（舊 Session 殘留） | [troubleshooting.md#幽靈連線](troubleshooting.md#幽靈連線) |
 | `sessionId` 突然變動 | Dynamo 已重新啟動 | 清空快取並重新初始化 |
-| 回應包含 `mcp_warning` | 缺少 StartMCPServer 節點 | 提示使用者放置該節點 |
+| 回應未連線 | BIM Assistant 斷開 | 提示使用者透過選單勾選連線 |
 
 ---
 

@@ -1,0 +1,65 @@
+{
+    "nodes": [
+        {
+            "id": "cad_curves",
+            "name": "BimorphNodes.CAD.CurvesFromCADLayers",
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": "cad_detail_curves",
+            "name": "BimorphNodes.CAD.DetailCurvesFromCADLayers",
+            "x": 400,
+            "y": 0
+        },
+        {
+            "id": "cad_symbolic_curves",
+            "name": "BimorphNodes.CAD.SymbolicCurvesFromCADLayers",
+            "x": 800,
+            "y": 0
+        },
+        {
+            "id": "cad_points",
+            "name": "BimorphNodes.CAD.PointsFromCADLayers",
+            "x": 1200,
+            "y": 0
+        },
+        {
+            "id": "cad_text_value",
+            "name": "BimorphNodes.CADTextData.TextValue",
+            "x": 0,
+            "y": 300
+        },
+        {
+            "id": "cad_text_origin",
+            "name": "BimorphNodes.CADTextData.OriginPoint",
+            "x": 300,
+            "y": 300
+        },
+        {
+            "id": "cad_text_rotation",
+            "name": "BimorphNodes.CADTextData.Rotation",
+            "x": 600,
+            "y": 300
+        },
+        {
+            "id": "cad_text_layer",
+            "name": "BimorphNodes.CADTextData.LayerName",
+            "x": 900,
+            "y": 300
+        },
+        {
+            "id": "cad_text_font",
+            "name": "BimorphNodes.CADTextData.FontTypeName",
+            "x": 1200,
+            "y": 300
+        },
+        {
+            "id": "autocad_select",
+            "name": "Data-Shapes.UI.AutocadCivil3D.SelectAutoCadObjects_Data",
+            "x": 0,
+            "y": 600
+        }
+    ],
+    "connectors": []
+}
