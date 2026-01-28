@@ -50,7 +50,7 @@
     // MCP 伺服器的網路參數
     "server": {
         "host": "127.0.0.1", // 🔧 修改點：伺服器主機位址（預設本機）
-        "port": 5050, // 🔧 修改點：伺服器埠號（避免與其他服務衝突）
+        "port": 65296, // 🔧 修改點：MCP Bridge 埠號（Node.js MCP Server 連線）
         "websocket_port": 65535, // 🔧 修改點：Dynamo WebSocket 監聽埠號（C# Extension 連線）
         "url_path": "/mcp/" // API 端點路徑
     },

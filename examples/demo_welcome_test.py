@@ -7,7 +7,7 @@ import uuid
 
 # Configuration
 SCRIPT_PATH = r"d:\AI\An\AutodeskDynamo_MCP\DynamoScripts\welcome_test.json"
-URL = "http://127.0.0.1:5050/mcp/"
+URL = "ws://127.0.0.1:65296"
 
 def run():
     print(f"Reading script template from: {SCRIPT_PATH}")

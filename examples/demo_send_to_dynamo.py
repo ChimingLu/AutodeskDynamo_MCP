@@ -2,7 +2,7 @@ import json
 import urllib.request
 import os
 
-URL = "http://127.0.0.1:5050/mcp/"
+URL = "ws://127.0.0.1:65296"
 SCRIPT_PATH = r"d:\AI\An\AutodeskDynamo_MCP\DynamoScripts\temp\another_line.json"
 
 def send_instruction():

@@ -32,7 +32,7 @@ namespace DynamoMCPListener
         /// <summary>
         /// HTTP Server 監聽埠號 (Default)
         /// </summary>
-        public static int SERVER_PORT = 5050; 
+        public static int SERVER_PORT = 65296; 
 
         /// <summary>
         /// WebSocket Server 監聽埠號 (Default)

@@ -185,7 +185,7 @@ The new version supports health check endpoints for real-time system status quer
 import urllib.request, json
 
 req = urllib.request.Request(
-    "http://127.0.0.1:5050/mcp/",
+    "ws://127.0.0.1:65296",
     data=json.dumps({"action": "health_check"}).encode(),
     headers={'Content-Type': 'application/json'}
 )
