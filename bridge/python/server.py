@@ -488,10 +488,10 @@ def _expand_native_nodes(instruction: dict) -> dict:
 
 async def execute_dynamo_instructions(instructions: str, clear_before_execute: bool = False, base_x: float = 0, base_y: float = 0, allow_fallback: bool = True, sessionId: str = None) -> str:
     with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
-    if not sessions: return "❌ 失敗: 未連線"
+    if not sessions: return "[FAIL] 失敗: 未連線"
     
     if sessionId and sessionId not in sessions:
-        return f"❌ 失敗: 找不到指定的會話 {sessionId}"
+        return f"[FAIL] 失敗: 找不到指定的會話 {sessionId}"
     
     session_id = sessionId if sessionId else sessions[-1]
     try:
@@ -499,7 +499,7 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
         try:
             json_data = json.loads(instructions)
         except json.JSONDecodeError as e:
-            return f"❌ JSON 解析錯誤: {str(e)}"
+            return f"[FAIL] JSON 解析錯誤: {str(e)}"
         
         if isinstance(json_data, list):
             json_data = {"nodes": json_data, "connectors": []}
@@ -551,31 +551,31 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
             
             retry_response = await ws_manager.send_command_async(session_id, fallback_data)
             if retry_response.get("status") == "ok":
-                return "✅ 成功 (已透過軌道 A 降級重試恢復)"
+                return "[OK] 成功 (已透過軌道 A 降級重試恢復)"
             else:
-                return f"❌ 失敗 (重試後仍錯誤): {retry_response.get('message')}"
+                return f"[FAIL] 失敗 (重試後仍錯誤): {retry_response.get('message')}"
         
-        return f"✅ 成功" if response.get("status") == "ok" else f"❌ 失敗: {response.get('message')}"
+        return f"[OK] 成功" if response.get("status") == "ok" else f"[FAIL] 失敗: {response.get('message')}"
     except Exception as e: 
         return f"Error: {e}"
 
 async def search_nodes_async(query: str) -> str:
     with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
-    if not sessions: return "❌ 失敗: 未連線"
+    if not sessions: return "[FAIL] 失敗: 未連線"
     session_id = sessions[-1]
     try:
         data = await ws_manager.send_command_async(session_id, {"action": "list_nodes", "filter": query})
-        if data.get("status") == "error": return f"❌ 搜尋出錯: {data.get('message')}"
+        if data.get("status") == "error": return f"[FAIL] 搜尋出錯: {data.get('message')}"
         
         # If the backend provided a formatted display string, use it
         if data.get("display"):
             return data["display"]
 
         nodes = data.get("nodes", [])
-        if not nodes: return f"🔍 搜尋 '{query}': 找不到任何節點。"
+        if not nodes: return f"[SEARCH] 搜尋 '{query}': 找不到任何節點。"
         
         # Fallback formatting
-        res = [f"🔍 搜尋 '{query}' 找到 {data.get('count', 0)} 個結果 (僅列出前 50 個):\n"]
+        res = [f"[SEARCH] 搜尋 '{query}' 找到 {data.get('count', 0)} 個結果 (僅列出前 50 個):\n"]
         for n in nodes:
             res.append(f"- **{n['name']}**")
             res.append(f"  fullName: `{n['fullName']}`")
@@ -597,12 +597,12 @@ async def analyze_workspace() -> str:
     
     is_ok, res = await _check_dynamo_connection()
     if not is_ok:
-        return f"❌ 失敗: {res}"
+        return f"[FAIL] 失敗: {res}"
     
     # [核心優化] 幽靈連線偵測與詳細狀態
     if session_count > 1:
         data = json.loads(res)
-        data["warning"] = f"⚠️ 警告: 偵測到 {session_count} 個活動中的會話。指令目前預設發送至最後一個連線 (Session: {sessions[-1]})。若不正確，請使用 list_sessions 查看並指定 sessionId。"
+        data["warning"] = f"[WARNING] 警告: 偵測到 {session_count} 個活動中的會話。指令目前預設發送至最後一個連線 (Session: {sessions[-1]})。若不正確，請使用 list_sessions 查看並指定 sessionId。"
         data["all_sessions"] = [
             {"id": sid, "fileName": info["fileName"], "connected": time.strftime('%H:%M:%S', time.localtime(info['connectedAt']))}
             for sid, info in session_info.items()
@@ -616,11 +616,11 @@ async def list_sessions() -> str:
     with ws_manager._lock:
         sessions = dict(ws_manager.session_info)
     
-    if not sessions: return "📭 目前沒有活動中的會話。"
+    if not sessions: return "[NO SESSIONS] 目前沒有活動中的會話。"
     
-    lines = ["📋 活動中的 Dynamo 會話清單：\n"]
+    lines = ["[SESSIONS] 活動中的 Dynamo 會話清單：\n"]
     for i, (sid, info) in enumerate(sessions.items()):
-        status = "🟢 作用中" if (time.time() - info["lastSeen"]) < 10 else "🟡 閒置"
+        status = "[ACTIVE]" if (time.time() - info["lastSeen"]) < 10 else "[IDLE]"
         lines.append(f"{i+1}. **{info['fileName']}**")
         lines.append(f"   - SessionID: `{sid}`")
         lines.append(f"   - 狀態: {status} (最後活動: {int(time.time() - info['lastSeen'])} 秒前)")
@@ -648,9 +648,9 @@ def get_server_stats() -> dict:
 
 async def clear_workspace() -> str:
     with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
-    if not sessions: return "❌ 失敗"
+    if not sessions: return "[FAIL] 失敗"
     res = await ws_manager.send_command_async(sessions[-1], {"action": "clear_graph"})
-    return "✅ 已清空" if res.get("status") == "ok" else f"❌ 失敗"
+    return "[OK] 已清空" if res.get("status") == "ok" else f"[FAIL] 失敗"
 
 def get_mcp_guidelines() -> str:
     g, q = _load_guidelines()
@@ -673,9 +673,9 @@ def get_script_library() -> str:
 # ==========================================
 
 if __name__ == "__main__":
-    log("═══════════════════════════════════════════")
+    log("==========================================")
     log("  Dynamo WebSocket Manager (Python)")
-    log("═══════════════════════════════════════════")
+    log("==========================================")
     log("")
     
     # 啟動 Dynamo Listener (websocket_port: 65535 - C# Extension 連線)
