@@ -63,9 +63,9 @@ def main():
     with open(base_file, 'w', encoding='utf-8') as f:
         json.dump(common_nodes, f, indent=4, ensure_ascii=False)
         
-    print(f"✅ 升級完成！")
-    print(f"📊 新增節點: {added_count}")
-    print(f"📊 補完資訊: {updated_count}")
+    print(f"[OK] 升級完成！")
+    print(f"[STATS] 新增節點: {added_count}")
+    print(f"[STATS] 補完資訊: {updated_count}")
     print(f"💾 已儲存至: {base_file}")
 
 if __name__ == "__main__":

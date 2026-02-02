@@ -40,21 +40,21 @@ async def call_mcp_tool(tool_name, args={}):
             data = json.loads(response)
             
             if "error" in data:
-                print(f"❌ JSON-RPC 錯誤: {data['error']}")
+                print(f"[FAIL] JSON-RPC 錯誤: {data['error']}")
                 return None
                 
             return data.get("result")
     except ConnectionRefusedError:
-        print("❌ 連線失敗: 無法連線至 MCP 伺服器 (ws://127.0.0.1:65296)")
-        print("💡 請確認 server.py 是否正在執行。")
+        print("[FAIL] 連線失敗: 無法連線至 MCP 伺服器 (ws://127.0.0.1:65296)")
+        print("[TIP] 請確認 server.py 是否正在執行。")
         return None
     except Exception as e:
-        print(f"❌ 通訊錯誤: {e}")
+        print(f"[FAIL] 通訊錯誤: {e}")
         return None
 
 async def analyze_workspace():
     """分析當前 Dynamo 工作區"""
-    print("🔍 正在連線至 MCP 伺服器...")
+    print("[SEARCH] 正在連線至 MCP 伺服器...")
     
     # 調用 analyze_workspace 工具
     result = await call_mcp_tool("analyze_workspace", {})
@@ -70,8 +70,8 @@ async def analyze_workspace():
         content = str(result)
         
         # 簡單判斷是否為錯誤訊息
-        if content.startswith("❌"):
-             print(f"⚠️ 工具回傳錯誤: {content}")
+        if content.startswith("[FAIL]"):
+             print(f"[WARNING] 工具回傳錯誤: {content}")
              # 仍嘗試解析以防它是 JSON
         
         data = None
@@ -99,10 +99,10 @@ async def analyze_workspace():
                     
                 except Exception as final_error:
                     # 若不是 JSON，可能就是純文字訊息
-                    if "❌" in content:
+                    if "[FAIL]" in content:
                          return # 已印出錯誤
                     
-                    print(f"❌ 錯誤: 無法解析為有效的 JSON 格式")
+                    print(f"[FAIL] 錯誤: 無法解析為有效的 JSON 格式")
                     print(f"原始內容預覽: {content[:200]}...")
                     return None
 
@@ -120,14 +120,14 @@ async def analyze_workspace():
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
-            print(f"✅ 分析結果已儲存至: {output_file}")
+            print(f"[OK] 分析結果已儲存至: {output_file}")
             
             # Print Summary
             ws_name = data.get('workspaceName', 'N/A')
             node_count = data.get('nodeCount', 0)
             
-            print(f"📄 工作區名稱: {ws_name}")
-            print(f"🔢 節點數量: {node_count}")
+            print(f"[FILE] 工作區名稱: {ws_name}")
+            print(f"[COUNT] 節點數量: {node_count}")
             print(f"🔗 連線數量: {data.get('connectorCount', 0)}")
             
             # Check for warnings

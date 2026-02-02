@@ -32,6 +32,11 @@
 
 
 ### 2. 核心行為義務 (不需要指令即可觸發)
+- **腳本庫優先原則 (Library-First Pattern)**：在開始任何任務前，**必須主動** 執行以下流程：
+  1. 查詢 `DynamoScripts/` 腳本庫（查找相關現成腳本）
+  2. 若找到匹配腳本，加載並應用參數
+  3. 若找不到，才生成新腳本
+  - 詳見：[`domain/improved_workflow_guideline.md`](domain/improved_workflow_guideline.md)
 - **自動預檢 (Auto-Precheck)**：在開始任何任務前，我 **必須主動** 檢索 `domain/`、`scripts/` 以及 `GEMINI.md`。如果已有先前成功的策略，必須優先參考，嚴禁重複撰寫類似邏輯的 JSON、PY。
 - **規格驅動 (SDD)**：重大變更前應先更新 `domain/` 中的 MD 文件（規格），而非直接修改程式碼。
 - **文件同步義務 (Documentation Sync)**：更新 `README.md` 時，**必須同步更新** `README_EN.md`，確保中英文版本內容一致。此規範適用於所有涉及 README 的修改、新增或刪除操作。

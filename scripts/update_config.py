@@ -32,7 +32,7 @@ def main():
     
     # 檢查模板檔案
     if not template_file.exists():
-        print(f"❌ 錯誤：找不到模板檔案 {template_file}")
+        print(f"[FAIL] 錯誤：找不到模板檔案 {template_file}")
         return 1
     
     print(f"\n[1/3] 讀取配置模板: {template_file.name}")
@@ -53,7 +53,7 @@ def main():
         # 寫入檔案
         output_file.write_text(formatted_json, encoding='utf-8')
         
-        print(f"\n✅ 成功生成: {output_file}")
+        print(f"\n[OK] 成功生成: {output_file}")
         print("   - 已移除所有註解")
         print("   - JSON 格式驗證通過")
         
@@ -63,7 +63,7 @@ def main():
         return 0
         
     except json.JSONDecodeError as e:
-        print(f"\n❌ JSON 格式驗證失敗: {e}")
+        print(f"\n[FAIL] JSON 格式驗證失敗: {e}")
         print("請檢查模板檔案的 JSON 語法是否正確")
         return 1
 

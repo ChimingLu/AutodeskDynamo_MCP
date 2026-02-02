@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "mcp_test_1",
+  "method": "tools/call",
+  "params": {
+    "name": "analyze_workspace",
+    "arguments": {}
+  }
+}

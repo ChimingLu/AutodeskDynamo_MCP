@@ -59,10 +59,10 @@ def run():
         
         with urllib.request.urlopen(req) as response:
             result = response.read().decode('utf-8')
-            print(f"✅ Success! Response: {result}")
+            print(f"[OK] Success! Response: {result}")
             
     except Exception as e:
-        print(f"❌ Failed: {e}")
+        print(f"[FAIL] Failed: {e}")
 
 if __name__ == "__main__":
     run()

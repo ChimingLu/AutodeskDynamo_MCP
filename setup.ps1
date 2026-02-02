@@ -72,7 +72,7 @@ else {
     Write-Host "   - Claude Desktop config not found, skipping registration." -ForegroundColor Gray
 }
 
-Write-Host "`n✅ Setup Complete!" -ForegroundColor Green
+Write-Host "`n[OK] Setup Complete!" -ForegroundColor Green
 Write-Host "Next Steps:"
 Write-Host "1. Restart your AI Agent / Claude Desktop."
 Write-Host "2. Start Dynamo and ensure 'BIM Assistant -> Connected' status is visible in the menu."
