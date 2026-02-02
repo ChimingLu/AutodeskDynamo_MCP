@@ -78,7 +78,7 @@ async def main():
             print(f"Result: {json.loads(resp).get('result')}")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

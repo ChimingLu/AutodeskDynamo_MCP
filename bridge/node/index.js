@@ -18,11 +18,15 @@ const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
 const WebSocket = require("ws");
+const { spawn } = require("child_process");
+const path = require("path");
+const net = require("net");
 
 // 配置
 const PYTHON_WS_URL = "ws://127.0.0.1:65296"; // MCP Bridge port
 const RECONNECT_INTERVAL = 5000; // 5 seconds
 const REQUEST_TIMEOUT = 30000; // 30 seconds
+const PYTHON_STARTUP_TIMEOUT = 5000; // 5 seconds to wait for Python server
 
 // MCP Server 實例
 const server = new Server(
@@ -42,6 +46,7 @@ let wsClient = null;
 let isConnected = false;
 let pendingRequests = new Map(); // { requestId: { resolve, reject, timer } }
 let requestCounter = 0;
+let pythonProcess = null; // Python server 子程序
 
 /**
  * 連接至 Python WebSocket Manager
@@ -190,6 +195,72 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
+ * 檢查埠口是否可用
+ */
+function isPortAvailable(port) {
+    return new Promise((resolve) => {
+        const server = net.createServer();
+        server.once('error', () => resolve(false));
+        server.once('listening', () => {
+            server.close();
+            resolve(true);
+        });
+        server.listen(port, '127.0.0.1');
+    });
+}
+
+/**
+ * 啟動 Python Server
+ */
+async function startPythonServer() {
+    console.error("[MCP Bridge] Checking Python server status...");
+    
+    // 檢查埠口是否已被佔用
+    const portAvailable = await isPortAvailable(65296);
+    
+    if (!portAvailable) {
+        console.error("[MCP Bridge] ✅ Port 65296 already in use, assuming server.py is running");
+        return true;
+    }
+    
+    console.error("[MCP Bridge] Port 65296 is available, starting Python server...");
+    
+    // 啟動 Python server
+    const launcherPath = path.join(__dirname, '..', 'launcher.py');
+    
+    pythonProcess = spawn('python', [launcherPath], {
+        cwd: path.join(__dirname, '..', '..'),
+        stdio: ['ignore', 'pipe', 'pipe']
+    });
+    
+    // 將 Python 輸出重定向到 stderr
+    pythonProcess.stdout.on('data', (data) => {
+        console.error(`[Python] ${data.toString().trim()}`);
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+        console.error(`[Python] ${data.toString().trim()}`);
+    });
+    
+    pythonProcess.on('error', (error) => {
+        console.error(`[MCP Bridge] ❌ Failed to start Python server: ${error.message}`);
+    });
+    
+    pythonProcess.on('exit', (code) => {
+        console.error(`[MCP Bridge] Python server exited with code ${code}`);
+        pythonProcess = null;
+    });
+    
+    console.error(`[MCP Bridge] ✅ Python server started (PID: ${pythonProcess.pid})`);
+    
+    // 等待 Python server 啟動
+    console.error("[MCP Bridge] Waiting for Python server to be ready...");
+    await new Promise(resolve => setTimeout(resolve, PYTHON_STARTUP_TIMEOUT));
+    
+    return true;
+}
+
+/**
  * 啟動 MCP Server
  */
 async function main() {
@@ -199,6 +270,9 @@ async function main() {
     console.error("");
 
     try {
+        // 啟動 Python Server
+        await startPythonServer();
+        
         // 連接至 Python WebSocket Manager
         await connectToPython();
 
@@ -224,6 +298,9 @@ process.on("SIGINT", () => {
     console.error("\n[MCP Bridge] Shutting down gracefully...");
     if (wsClient) {
         wsClient.close();
+    }
+    if (pythonProcess) {
+        pythonProcess.kill();
     }
     process.exit(0);
 });

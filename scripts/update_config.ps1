@@ -43,7 +43,7 @@ try {
     # 寫入檔案
     $FormattedJson | Set-Content $OutputFile -Encoding UTF8
     
-    Write-Host "`n✅ 成功生成: $OutputFile" -ForegroundColor Green
+    Write-Host "`n[OK] 成功生成: $OutputFile" -ForegroundColor Green
     Write-Host "   - 已移除所有註解" -ForegroundColor Gray
     Write-Host "   - JSON 格式驗證通過" -ForegroundColor Gray
     

@@ -211,7 +211,7 @@ ws_manager = WebSocketManager()
 class MCPBridgeServer:
     """處理來自 Node.js MCP Server 的 WebSocket 請求"""
     
-    def __init__(self, host="127.0.0.1", port=5051):
+    def __init__(self, host="127.0.0.1", port=65296):
         self.host = host
         self.port = port
 
@@ -504,8 +504,8 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
         if isinstance(json_data, list):
             json_data = {"nodes": json_data, "connectors": []}
             
-        # 2. 軌道 B 自動擴展
-        json_data = _expand_native_nodes(json_data)
+        # 2. 軌道 B 自動擴展 (臨時禁用 - 改用純軌道 A)
+        # json_data = _expand_native_nodes(json_data)
         
         # 3. 座標偏移與策略標註
         if "nodes" in json_data:
@@ -523,6 +523,10 @@ async def execute_dynamo_instructions(instructions: str, clear_before_execute: b
         # 5. [核心優化] 差異化重試與降級機制 (Differentiated Fallback)
         if response.get("status") == "error" and allow_fallback:
             log(f"[Fallback] 軌道 B 執行失敗，嘗試降級至軌道 A (Code Block)... 錯誤: {response.get('message')}")
+            
+            # [修復] 清除失敗的節點，避免重複創建
+            log("[Fallback] 清除失敗節點...")
+            await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
             
             fallback_nodes = []
             for node in json_data.get("nodes", []):

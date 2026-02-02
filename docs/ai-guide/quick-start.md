@@ -1,7 +1,7 @@
 # Dynamo Automation Quick Start for AI Agents
 
 > **Audience:** AI agents (Claude, Gemini, Antigravity, etc.) using MCP to control Dynamo  
-> **Last Updated:** 2026-01-24
+> **Last Updated:** 2026-01-30 (Revised)
 
 This guide helps AI agents efficiently automate Autodesk Dynamo through the Model Context Protocol (MCP).
 
@@ -17,8 +17,8 @@ This guide helps AI agents efficiently automate Autodesk Dynamo through the Mode
 2. **Available MCP Tools**
    - `execute_dynamo_instructions` - Create nodes and connections
    - `analyze_workspace` - Get workspace state
-   - `list_available_nodes` - Search available nodes
-   - `save_to_library` / `load_script_from_library` - Script management
+   - `search_nodes` - Search available nodes
+   - `get_script_library` - Get script library list
    - `clear_workspace` - Clear current workspace
 
 ---
@@ -278,31 +278,31 @@ await execute_dynamo_instructions(json.dumps({
 
 ## Templates Library
 
-Ready-to-use JSON templates are available in `.skills/dynamo-automation/assets/templates/`:
+Ready-to-use JSON templates are available in `DynamoScripts/`:
 
 | Template | Purpose | Strategy |
 |:---|:---|:---:|
 | `point_basic.json` | Single point creation | Code Block |
-| `line_nested.json` | Nested geometry | Code Block |
-| `cuboid_parameterized.json` | Parameterized solid | Native Node |
-| `sphere_with_preview.json` | Preview control | Native Node |
-| `python_basic.json` | Empty Python node | Python |
-| `python_revit_rooms.json` | Revit room reader | Python |
-| `connection_workflow.json` | Select → Python | Connection |
+| `line_basic.json` | Basic line geometry | Code Block |
+| `random_cuboid.json` | Parameterized solid | Native Node |
+| `solid_demo.json` | Preview control | Native Node |
+| `revit_room_collector.json` | Revit room reader | Python |
+| `connect_points.json` | Connect workflow | Connection |
 
 **Usage:**
 ```python
 import json
 
 # Load template
-with open('.skills/dynamo-automation/assets/templates/cuboid_parameterized.json') as f:
+with open('DynamoScripts/random_cuboid.json') as f:
     template = json.load(f)
 
-# Modify parameters
-template['nodes'][0]['params']['width'] = 200
+# Use template directly or modify if needed
+# template['nodes'][0]['params']['width'] = 200  # Example modification
 
 # Execute
-await execute_dynamo_instructions(json.dumps(template))
+result = await execute_dynamo_instructions(json.dumps(template))
+print(result)  # Should show [OK] if successful
 ```
 
 ---
