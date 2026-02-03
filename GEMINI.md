@@ -29,6 +29,8 @@
 | **`/review`** | **憲法審計**：檢查 `GEMINI.md` 是否過於肥大。當規則超過 100 行，提議將具體的「規格或案例」遷移至 `domain/` 或 `docs/`。 |
 | **`/explain`** | **視覺化解構**：解釋複雜概念時，**強制使用** Markdown 表格、ASCII 流程圖或 Mermaid 圖表。嚴禁提供冗長的文字牆。 |
 | **`/image`** | **腳本視覺化分析**：依照 [`domain/visual_analysis_workflow.md`](domain/visual_analysis_workflow.md) 之標準流程執行。自動偵測當前工作區檔名，若未存檔則提示使用者。產出包含：(1) 技術文檔 (2) 視覺化儀表板圖片 (**強制 16:9 Cinematic Landscape 格式**)。所有產出須存至 `image/` 資料夾。 |
+| **`/save`** | **資產入庫**：當使用者對目前的生成結果滿意時，手動觸發此指令將 JSON 腳本存入 `DynamoScripts/`。**嚴禁 AI 在未獲得 /save 指令前主動修改腳本庫。** |
+
 
 
 ### 2. 核心行為義務 (不需要指令即可觸發)
@@ -122,8 +124,9 @@ graph LR
     B -->|存在| C[load_script_from_library]
     B -->|不存在| D[生成新 JSON]
     D --> E[執行成功?]
-    E -->|是| F[詢問是否保存]
-    F --> G[save_to_library]
+    E -->|是| F{使用者下達 /save?}
+    F -->|是| G[save_to_library]
+    F -->|否| H[維持現狀/僅供單次執行]
 ```
 
 **腳本命名規範**：
