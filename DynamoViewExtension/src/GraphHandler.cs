@@ -86,7 +86,157 @@ namespace DynamoMCPListener
                     };
 
                     return JsonConvert.SerializeObject(statusData);
-                } else if (action == "list_nodes") {
+                }
+                
+                // === MCP Resources Layer: Structured Data Queries ===
+                if (action == "get_nodes_structured")
+                {
+                    var nodes = _dynamoModel.CurrentWorkspace.Nodes.Select(n => {
+                        string stateStr = "Active";
+                        try { stateStr = n.State.ToString(); } catch { }
+                        return new
+                        {
+                            id = n.GUID.ToString(),
+                            name = n.Name,
+                            fullName = n.GetType().FullName,
+                            x = n.X,
+                            y = n.Y,
+                            state = stateStr,
+                            isSelected = n.IsSelected,
+                            inputs = n.InPorts.Select(p => new
+                            {
+                                name = p.Name,
+                                type = p.PortType.ToString(),
+                                isConnected = p.IsConnected
+                            }).ToList(),
+                            outputs = n.OutPorts.Select(p => new
+                            {
+                                name = p.Name,
+                                type = p.PortType.ToString()
+                            }).ToList(),
+                            errorMessage = stateStr.Contains("Error") ? stateStr : null
+                        };
+                    }).ToList();
+
+                    return JsonConvert.SerializeObject(new { status = "ok", nodes = nodes });
+                }
+
+                if (action == "get_connectors_structured")
+                {
+                    var connectors = _dynamoModel.CurrentWorkspace.Connectors.Select(c => new
+                    {
+                        from = c.Start.Owner.GUID.ToString(),
+                        to = c.End.Owner.GUID.ToString(),
+                        fromPort = c.Start.Index,
+                        toPort = c.End.Index,
+                        fromPortName = c.Start.Name,
+                        toPortName = c.End.Name
+                    }).ToList();
+
+                    return JsonConvert.SerializeObject(new { status = "ok", connectors = connectors });
+                }
+
+                if (action == "get_selection")
+                {
+                    var selected = _dynamoModel.CurrentWorkspace.Nodes
+                        .Where(n => n.IsSelected)
+                        .Select(n => new
+                        {
+                            id = n.GUID.ToString(),
+                            name = n.Name,
+                            x = n.X,
+                            y = n.Y
+                        }).ToList();
+
+                    return JsonConvert.SerializeObject(new { status = "ok", count = selected.Count, nodes = selected });
+                }
+
+                if (action == "get_error_nodes")
+                {
+                    var errorNodes = _dynamoModel.CurrentWorkspace.Nodes
+                        .Where(n => {
+                            try {
+                                string s = n.State.ToString();
+                                return s.Contains("Error") || s.Contains("Warning");
+                            } catch { return false; }
+                        })
+                        .Select(n => {
+                            string stateStr = "Unknown";
+                            try { stateStr = n.State.ToString(); } catch { }
+                            return new
+                            {
+                                id = n.GUID.ToString(),
+                                name = n.Name,
+                                state = stateStr,
+                                errorMessage = stateStr
+                            };
+                        }).ToList();
+
+                    return JsonConvert.SerializeObject(new { status = "ok", count = errorNodes.Count, nodes = errorNodes });
+                }
+
+                if (action == "get_node_details")
+                {
+                    string targetId = data["nodeId"]?.ToString();
+                    if (string.IsNullOrEmpty(targetId))
+                    {
+                        return "{\"status\": \"error\", \"message\": \"Missing nodeId parameter\"}";
+                    }
+
+                    Guid targetGuid;
+                    if (!Guid.TryParse(targetId, out targetGuid))
+                    {
+                        // 嘗試從 ID 映射表查找
+                        if (!_nodeIdMap.TryGetValue(targetId, out targetGuid))
+                        {
+                            return "{\"status\": \"error\", \"message\": \"Node not found\"}";
+                        }
+                    }
+
+                    var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(n => n.GUID == targetGuid);
+                    if (node == null)
+                    {
+                        return "{\"status\": \"error\", \"message\": \"Node not found\"}";
+                    }
+
+                    string nodeStateStr = "Active";
+                    try { nodeStateStr = node.State.ToString(); } catch { }
+
+                    var nodeDetail = new
+                    {
+                        id = node.GUID.ToString(),
+                        name = node.Name,
+                        fullName = node.GetType().FullName,
+                        x = node.X,
+                        y = node.Y,
+                        state = nodeStateStr,
+                        isSelected = node.IsSelected,
+                        inputs = node.InPorts.Select(p => new
+                        {
+                            name = p.Name,
+                            type = p.PortType.ToString(),
+                            isConnected = p.IsConnected,
+                            connectedFrom = p.IsConnected ? _dynamoModel.CurrentWorkspace.Connectors
+                                .Where(c => c.End.Owner.GUID == node.GUID && c.End.Index == p.Index)
+                                .Select(c => c.Start.Owner.GUID.ToString())
+                                .FirstOrDefault() : null
+                        }).ToList(),
+                        outputs = node.OutPorts.Select(p => new
+                        {
+                            name = p.Name,
+                            type = p.PortType.ToString(),
+                            connectedTo = _dynamoModel.CurrentWorkspace.Connectors
+                                .Where(c => c.Start.Owner.GUID == node.GUID && c.Start.Index == p.Index)
+                                .Select(c => c.End.Owner.GUID.ToString())
+                                .ToList()
+                        }).ToList(),
+                        errorMessage = nodeStateStr.Contains("Error") ? nodeStateStr : null
+                    };
+
+                    return JsonConvert.SerializeObject(new { status = "ok", node = nodeDetail });
+                }
+
+                if (action == "list_nodes") {
                     string filter = data["filter"]?.ToString()?.ToLower() ?? "";
                     MCPLogger.Info($"[list_nodes] Searching for: {filter}");
 
