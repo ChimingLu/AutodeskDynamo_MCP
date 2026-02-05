@@ -56,3 +56,8 @@
 - **核心規範**: [GEMINI.md](file:///d:/AI/An/AutodeskDynamo_MCP/GEMINI.md)
 - **實作計畫**: `implementation_plan.md`
 - **啟動路徑**: `bridge/python/server.py`
+
+## 🧪 自動化測試 (Autotest)
+- **執行測試**: 在終端機執行 `.\autotest.ps1` (PowerShell) 或 `autotest` (CMD)。
+- **AI 指令**: 對 AI 說「執行測試」或「Run autotest」，它將執行 `python tests/test_roadmap_features.py`。
+- **測試內容**: 驗證節點搜索、Python 注入、外掛節點 (Clockwork) 與幾何運算。

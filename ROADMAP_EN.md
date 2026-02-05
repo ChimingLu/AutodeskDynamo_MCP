@@ -9,6 +9,7 @@ This document outlines the future development direction and plans for the Autode
 ## 📍 Current Version
 
 **v3.1** (2026-01-25) - UI Modernization & Menu Integration
+**v3.2** (In Progress) - Memory Bank Knowledge Management & SOP System
 
 ---
 
@@ -68,6 +69,11 @@ graph LR
 - [ ] Solve "don't know which node to use" anxiety
 - [ ] Solve "don't know what plugins exist" exploration difficulties
 
+### 🧠 Memory Bank Project Brain (v3.2)
+- [x] **Memory Bank Architecture**: Establish `memory-bank/` structured knowledge base (`activeContext`, `progress`)
+- [x] **SOP Knowledge Base**: Standardize operational commands into SOP documents (`domain/commands/`)
+- [ ] Auto-update Mechanism: Automatically update Context after conversation
+
 ### 🧠 AI Agent Learning & Personalized Knowledge Base
 - [ ] Read team's historical `.dyn` files (Legacy Data)
 - [ ] Learn specific node usage habits and unique techniques
@@ -126,7 +132,8 @@ graph LR
 
 | Version | Key Features | Status |
 |:---:|:---|:---:|
-| **v3.2** | Performance Dashboard, API Versioning | 🔄 Planning |
+| **v3.2** | Memory Bank Knowledge Mgmt, SOP System | 🔄 In Progress |
+| **v3.3** | Performance Dashboard, API Versioning | 📋 Pending |
 | **v3.3** | Multi-Instance Support, Workspace Snapshots | 📋 Pending |
 | **v4.0** | Smart Debugging, IPO Mode Organization | 📋 Pending |
 | **v4.1** | Enhanced Node Recommendations, Personalized KB | 📋 Pending |
@@ -156,6 +163,7 @@ Feel free to submit feature suggestions via GitHub Issues! Please use the `enhan
 
 ## 📝 Update History
 
+- **2026-02-05**: Added v3.2 Memory Bank & SOP System plans
 - **2026-02-03**: Integrated four-aspect feature concepts, restructured RoadMap architecture
 
 ---

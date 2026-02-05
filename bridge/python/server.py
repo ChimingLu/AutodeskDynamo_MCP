@@ -493,6 +493,15 @@ class MCPBridgeServer:
                 "readOnlyHint": True
             },
             {
+                "name": "run_autotest",
+                "description": "執行專案自動化測試 (test_roadmap_features.py)。驗證 Dynamo 節點放置、Python 注入、外掛支援與幾何運算功能。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "readOnlyHint": True
+            },
+            {
                 "name": "list_sessions",
                 "description": "列出所有當前活動中的 Dynamo WebSocket 會話及其詳細資訊。",
                 "inputSchema": {"type": "object", "properties": {}},
@@ -567,6 +576,8 @@ class MCPBridgeServer:
                 return get_mcp_guidelines()
             elif name == "get_script_library":
                 return get_script_library()
+            elif name == "run_autotest":
+                return await run_autotest_async()
             elif name == "list_sessions":
                 return await list_sessions()
             elif name == "get_server_stats":
@@ -1059,6 +1070,50 @@ def get_script_library() -> str:
             desc = "No description"
         scripts.append({"name": name, "description": desc})
     return json.dumps(scripts, ensure_ascii=False, indent=2)
+
+async def run_autotest_async() -> dict:
+    """執行自動化測試腳本"""
+    import subprocess
+    import sys
+    
+    from pathlib import Path
+    
+    # 修正: 使用 Path(__file__) 定位，不依賴未定義的 BASE_DIR
+    current_dir = Path(__file__).parent.resolve()
+    # server.py 在 bridge/python/server.py，專案根目錄在 ../../
+    project_root = current_dir.parent.parent
+    script_path = project_root / "tests" / "test_roadmap_features.py"
+    
+    if not script_path.exists():
+        return {"error": f"Test script not found at {script_path}"}
+        
+    try:
+        # 強制設定 UTF-8 環境變數
+        import os
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONLEGACYWINDOWSSTDIO"] = "utf-8"
+
+        # 使用目前的 python 解譯器執行
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            env=env  # 注入環境變數
+        )
+        
+        status = "passed" if result.returncode == 0 else "failed"
+        
+        return {
+            "status": status,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.returncode
+        }
+    except Exception as e:
+        return {"error": f"Failed to run autotest: {str(e)}"}
 
 # ==========================================
 # 入口點

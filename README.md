@@ -9,9 +9,20 @@
 
 ---
 
+## 🚀 最新版本 v3.2：Memory Bank 與 SOP 標準化
+
+本專案已升級至 **v3.2**，引入了 **Memory Bank** 架構與全面的 **SOP 化**，並大幅強化了系統穩定性：
+
+1.  **Memory Bank (`memory-bank/`)**：結構化的 AI 知識庫，包含專案進度、技術堆疊與核心教訓，確保 AI 協作的上下文連貫性。
+2.  **SOP 知識庫 (`domain/`)**：將操作指令轉化為標準作業程序 (SOP)，提升 AI 執行的準確度。
+3.  **MCP Server 穩定性**：修復了 asyncio 事件迴圈衝突與 WebSocket 幽靈連線問題。
+4.  **Autotest 整合**：新增 `run_autotest` 工具，支援自動化功能驗證。
+
+---
+
 ## 🚀 重大更新：混合模式 Stdin+WebSocket (v3.0)
 
-本專案已升級為 **Stdin+WebSocket 混合機制**，以支援 Gemini CLI、Claude Desktop 及 Antigravity：
+本專案於 v3.0 升級為 **Stdin+WebSocket 混合機制**，以支援 Gemini CLI、Claude Desktop 及 Antigravity：
 
 1.  **AI 用戶端** (Gemini/Claude) 透過 **Stdio (MCP)** 與 Node.js 橋接器溝通。
 2.  **Node.js 橋接器** (`bridge/node/index.js`) 透過 **WebSocket** 將請求轉發給 Python 管理員。
@@ -36,7 +47,8 @@ graph TD
 - `bridge/`: **[核心橋接]** 存放通訊與工具邏輯。
   - `python/server.py`: 主要 MCP 處理器與 WebSocket 伺服器。
   - `node/index.js`: Stdio-to-WS 橋接器（供 AI Client 調用）。
-- `domain/`: **[SOP 知識庫]** 標準操作程序與故障排除指南。
+- `memory-bank/`: **[AI 記憶核心]** 結構化知識管理（`activeContext.md`, `progress.md`, `branch_status.md` 等）。
+- `domain/`: **[SOP 知識庫]** 標準操作程序、斜線指令文件與故障排除指南。
 - `DynamoScripts/`: 腳本庫，存放經過測試的常用 Dynamo JSON 圖表定義。
 - `DynamoViewExtension/`: C# 原始碼，包含 `common_nodes.json` (節點簽名定義)。
 - `logs/`: 集中存放所有伺服器日誌與錯誤報告。
@@ -123,9 +135,12 @@ graph TD
 
 - `execute_dynamo_instructions` - 創建節點與連線
 - `analyze_workspace` - 分析工作區狀態
-- `list_available_nodes` - 搜尋可用節點
-- `save_to_library` / `load_script_from_library` - 腳本庫管理
+- `search_nodes` - 搜尋可用節點 (舊名: list_available_nodes)
+- `run_autotest` - 執行自動化測試
+- `get_script_library` - 取得腳本庫清單
 - `clear_workspace` - 清除工作區
+- `list_sessions` - 查看連線工作階段
+- `get_workspace_version` - 取得工作區版本 (樂觀鎖控制)
 
 ### Antigravity 專屬功能（可選）
 

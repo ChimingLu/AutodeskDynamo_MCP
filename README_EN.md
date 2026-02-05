@@ -9,9 +9,20 @@ With this system, AI can directly control Dynamo for BIM automation operations, 
 
 ---
 
+## 🚀 Latest Version v3.2: Memory Bank & SOP Standardization
+
+The project has been upgraded to **v3.2**, introducing the **Memory Bank** architecture and comprehensive **Standard Operating Procedures (SOPs)**, with significant improvements in system stability:
+
+1.  **Memory Bank (`memory-bank/`)**: Structured AI knowledge base including project progress, tech stack, and core lessons, ensuring context continuity for AI collaboration.
+2.  **SOP Knowledge Base (`domain/`)**: Transforming operational commands into Standard Operating Procedures to improve AI execution accuracy.
+3.  **MCP Server Stability**: Fixed asyncio event loop conflicts and WebSocket ghost connection issues.
+4.  **Autotest Integration**: Added `run_autotest` tool for automated functional verification.
+
+---
+
 ## 🚀 Major Update: Hybrid Stdin+WebSocket Mode (v3.0)
 
-This project has been upgraded to a **Hybrid Stdin+WebSocket mechanism** to support Gemini CLI, Claude Desktop, and Antigravity:
+This project was upgraded in v3.0 to a **Hybrid Stdin+WebSocket mechanism** to support Gemini CLI, Claude Desktop, and Antigravity:
 
 1.  **AI Client** (Gemini/Claude) communicates with the Node.js bridge via **Stdio (MCP)**.
 2.  **Node.js Bridge** (`bridge/node/index.js`) forwards requests to the Python manager via **WebSocket**.
@@ -36,7 +47,8 @@ graph TD
 - `bridge/`: **[Core Bridge]** Communication and tool logic.
   - `python/server.py`: Main MCP processor and WebSocket server.
   - `node/index.js`: Stdio-to-WS bridge.
-- `domain/`: **[SOP Knowledge Base]** Standard Operating Procedures and Troubleshooting.
+- `memory-bank/`: **[AI Core Memory]** Structured knowledge management (`activeContext.md`, `progress.md`, etc.).
+- `domain/`: **[SOP Knowledge Base]** Standard Operating Procedures, Slash Command docs, and Troubleshooting.
 - `DynamoScripts/`: Script library for tested Dynamo JSON graph definitions.
 - `DynamoViewExtension/`: C# source code, including `common_nodes.json`.
 - `logs/`: Central repository for server logs and error reports.
@@ -123,9 +135,12 @@ This project provides an AI automation interface through **Model Context Protoco
 
 - `execute_dynamo_instructions` - Create nodes and connections
 - `analyze_workspace` - Analyze workspace state
-- `list_available_nodes` - Search available nodes
-- `save_to_library` / `load_script_from_library` - Script library management
+- `search_nodes` - Search available nodes (formerly `list_available_nodes`)
+- `run_autotest` - Execute automated tests
+- `get_script_library` - Get script library list
 - `clear_workspace` - Clear workspace
+- `list_sessions` - List active sessions
+- `get_workspace_version` - Get workspace version (Optimistic locking)
 
 ### Antigravity-Specific Features (Optional)
 
@@ -165,8 +180,8 @@ After installation, Antigravity will automatically recognize Dynamo-related requ
 | `execute_dynamo_instructions` | Place nodes and connectors on the canvas | Core automated modeling |
 | `clear_workspace` | **[NEW]** One-click workspace clearing | Redesign or redrawing |
 | `analyze_workspace` | Query current node status and errors | Debugging and status checking |
-| `list_available_nodes` | Search available Dynamo nodes (including .dyf) | Find modeling tools |
-| `save/load_script_to_library` | Persist snapshot scripts to script library | Modular reuse |
+| `search_nodes` | Search available Dynamo nodes (including .dyf) | Find modeling tools |
+| `get_script_library` | Get list of available scripts | Modular reuse |
 
 > [!TIP]
 > **Prevent Overlapping Features**: When executing `execute_dynamo_instructions`, you can set `clear_before_execute=True` to automatically clear the canvas before drawing new geometry.
@@ -219,17 +234,18 @@ Add the following to Antigravity's MCP configuration:
 
 ### 2. Claude Desktop (Recommended)
 Click the "Edit Config" button in Claude Desktop settings and add the following:
-> **Note**: You must use the `python` command, and the path must be an **absolute path** (e.g. `D:\\AI\\...`).
 
 ```json
 "dynamo-mcp": {
-  "command": "python",
+  "command": "node",
   "args": [
-    "D:\\AI\\An\\AutodeskDynamo_MCP\\server.py"
+    "absolute\\path\\to\\bridge\\node\\index.js"
   ]
 }
 ```
-After configuration, `dynamo-mcp` (green light) will appear in the Claude list, and you can start using it.
+> [!IMPORTANT]
+> **Connection Order**: Before starting the AI Client, it is recommended to manually start `python bridge/python/server.py` to ensure the WS port is available.
+> After configuration, `dynamo-mcp` (green light) will appear in the Claude list, and you can start using it.
 
 ---
 
