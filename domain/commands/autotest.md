@@ -51,5 +51,5 @@ flowchart TD
 ## 執行方式
 
 ```bash
-python tests/test_roadmap_features.py
+python tools/autotest.py
 ```

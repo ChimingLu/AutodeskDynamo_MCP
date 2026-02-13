@@ -156,6 +156,14 @@ flowchart TD
 - [ ] 是否指定 `overload` (如 `"3D"`)
 - [ ] 是否設置 `preview` 控制可見性
 
+### 軌道 C (Python 節點) 專屬
+
+- [ ] 節點名稱是否為 `"Python Script"`
+- [ ] 是否包含 `pythonCode` (或 `script`) 欄位且內容正確轉義
+- [ ] **(新功能)** 若需要多個輸入，是否設置 `inputCount` (例如 `4`)
+- [ ] 代碼中是否內嵌必要庫引用 (如 `import clr`, `clr.AddReference`)
+- [ ] 節點座標是否避開現有節點 (避免重疊)
+
 ---
 
 ## 📌 當前三大不可違背鐵律

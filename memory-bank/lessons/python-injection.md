@@ -63,11 +63,21 @@ MethodInfo onModified = pythonNode.GetType()
 onModified.Invoke(pythonNode, new object[] { true });
 ```
 
+### 4. 輸入數量調整 (Input Count Adjustment)
+
+透過 `UpdateModelValueCommand` 動態調整輸入埠數量：
+
+```csharp
+_dynamoModel.ExecuteCommand(new DynamoModel.UpdateModelValueCommand(
+    Guid.Empty, dynamoGuid, "InputCount", count.ToString()
+));
+```
+
 ---
 
 ## 成功率
 
-**100%** - 已驗證可正確顯示代碼與設置 CPython3 引擎
+**100%** - 已驗證可正確顯示代碼、調整輸入數量與設置 CPython3 引擎
 
 ---
 

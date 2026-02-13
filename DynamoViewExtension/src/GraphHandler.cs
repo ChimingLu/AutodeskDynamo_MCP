@@ -59,6 +59,8 @@ namespace DynamoMCPListener
                     {
                         id = n.GUID.ToString(),
                         name = n.Name,
+                        fullName = n.GetType().FullName,
+                        creationName = n.GetType().GetProperty("CreationName")?.GetValue(n)?.ToString() ?? n.Name,
                         x = n.X,
                         y = n.Y
                     }).ToList();
@@ -445,7 +447,7 @@ namespace DynamoMCPListener
             double x = n["x"]?.ToObject<double>() ?? 0;
             double y = n["y"]?.ToObject<double>() ?? 0;
 
-            MCPLogger.Info($"[CreateNode] 開始處理節點: {nodeName} (ID: {nodeIdStr})");
+            MCPLogger.Info($"[CreateNode] Processing Node: {nodeName} (ID: {nodeIdStr})");
 
             Guid dynamoGuid = Guid.TryParse(nodeIdStr, out Guid parsedGuid) ? parsedGuid : Guid.NewGuid();
             if (!string.IsNullOrEmpty(nodeIdStr))
@@ -453,7 +455,53 @@ namespace DynamoMCPListener
                 _nodeIdMap[nodeIdStr] = dynamoGuid;
             }
 
-            // === 1. Code Block / Number ===
+            // === 0. CHECK EXISTENCE (The Fix) ===
+            var existingNode = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(nd => nd.GUID == dynamoGuid);
+            if (existingNode != null)
+            {
+                // [UPDATE MODE] Node exists, just update position and values
+                MCPLogger.Info($"[Upsert] Node {dynamoGuid} exists. Updating properties only.");
+                
+                // Update Position
+                var updatePosCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, "Position", $"{x},{y}");
+                _dynamoModel.ExecuteCommand(updatePosCmd);
+
+                // Update Values (Code Block / SetValue)
+                if (n["value"] != null)
+                {
+                    string val = n["value"].ToString();
+                    if (nodeName == "Code Block" && !val.EndsWith(";")) val += ";";
+
+                    string propName = "Value";
+                    if (nodeName == "Code Block") propName = "Code";
+                    else 
+                    {
+                        // Dynamic property resolution
+                        string resolvedProp = GetValuePropertyName(existingNode.CreationName) ?? "Value";
+                        propName = resolvedProp;
+                    }
+
+                    var updateValCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, dynamoGuid, propName, val);
+                    _dynamoModel.ExecuteCommand(updateValCmd);
+                }
+
+                // Update Python Script (Special Handling)
+                if (nodeName == "Python Script" || nodeName.Contains("PythonScript"))
+                {
+                    string code = n["script"]?.ToString() ?? n["pythonCode"]?.ToString();
+                    if (code != null)
+                    {
+                        UpdatePythonCode(existingNode, code);
+                    }
+                }
+
+                HandlePreview(n, dynamoGuid);
+                return; // Exit, do NOT create new node
+            }
+
+            // === 1. CREATE MODE (Node does not exist) ===
+            
+            // ... (Special handling for Code Block / Python Script creation) ...
             if (nodeName == "Number" || nodeName == "Code Block")
             {
                 var cmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, "Code Block", x, y, false, false);
@@ -471,145 +519,49 @@ namespace DynamoMCPListener
                 return;
             }
 
-            // === 1.5 Python Script Injection (Diagnostics & UI-Safe Injection) ===
             if (nodeName == "Python Script" || nodeName.Contains("PythonScript"))
             {
+                // Try multiple names for Python Script
                 string[] possibleNames = { "Python Script", "Core.Scripting.Python Script", "PythonScript" };
                 bool created = false;
                 foreach (var nameToTry in possibleNames) {
                     try {
                         _dynamoModel.ExecuteCommand(new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, nameToTry, x, y, false, false));
                         if (_dynamoModel.CurrentWorkspace.Nodes.Any(nd => nd.GUID == dynamoGuid)) {
-                            MCPLogger.Info($"[Python] Node created with name: {nameToTry}");
                             created = true;
                             break;
                         }
                     } catch {}
                 }
 
-                if (created && n["script"] != null)
+                if (created)
                 {
-                    string code = n["script"].ToString();
-                    bool injected = false;
-
-                    // --- Phase 1: Global Reflection for UpdatePythonNodeCommand ---
-                    try {
-                        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                        Type cmdType = null;
-                        foreach (var asm in assemblies) {
-                            cmdType = asm.GetType("Dynamo.Models.DynamoModel+UpdatePythonNodeCommand") ?? 
-                                      asm.GetType("Dynamo.Models.UpdatePythonNodeCommand");
-                            if (cmdType != null) break;
-                        }
-
-                        if (cmdType != null) {
-                            var constructor = cmdType.GetConstructors().FirstOrDefault(c => c.GetParameters().Length >= 2);
-                            if (constructor != null) {
-                                object[] p = constructor.GetParameters().Length == 3 
-                                    ? new object[] { dynamoGuid, code, "CPython3" }
-                                    : new object[] { dynamoGuid, code };
-                                var pyCmd = constructor.Invoke(p) as DynamoModel.RecordableCommand;
-                                _dynamoModel.ExecuteCommand(pyCmd);
-                                MCPLogger.Info($"[Python] Injection SUCCESS via reflected Command from {cmdType.Assembly.FullName}");
-                                injected = true;
-                            }
-                        }
-                    } catch (Exception ex) {
-                        MCPLogger.Warning($"[Python] Command reflection failed: {ex.Message}");
+                    var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(nd => nd.GUID == dynamoGuid);
+                    
+                    // Input Count Adjustment
+                    if (node != null && n["inputCount"] != null)
+                    {
+                        AdjustInputPorts(node, n["inputCount"].ToObject<int>());
                     }
 
-                    // --- Phase 2: Dynamic Property & Notification Fallback ---
-                    if (!injected) {
-                        var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(nd => nd.GUID == dynamoGuid);
-                        if (node != null) {
-                            try {
-                                var prop = node.GetType().GetProperty("Script") ?? node.GetType().GetProperty("Code");
-                                if (prop != null) {
-                                    prop.SetValue(node, code);
-                                    var notifyMethod = node.GetType().GetMethod("OnNodeModified", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                                    if (notifyMethod != null) notifyMethod.Invoke(node, new object[] { true });
-                                    MCPLogger.Info($"[Python] Fallback SUCCESS using Dynamic Property + OnNodeModified.");
-                                    injected = true;
-                                }
-                            } catch {}
-                        }
+                    // Python Code Injection
+                    string code = n["script"]?.ToString() ?? n["pythonCode"]?.ToString();
+                    if (code != null && node != null)
+                    {
+                         UpdatePythonCode(node, code);
                     }
                 }
-
                 HandlePreview(n, dynamoGuid);
                 return;
             }
 
-            // === 2. Strategy: Deep Identify & Creation ===
+            // Standard Node Creation
             string finalCreationName = !string.IsNullOrEmpty(creationNameOverride) ? creationNameOverride : nodeName;
+            
+            // [Reverted] Remove Deep Identify Logic as per user request
+            // We trust the input name directly (e.g. "Clockwork.Core.Sequence.Passthrough")
+            MCPLogger.Info($"[CreateNode] Using direct name: {finalCreationName}");
 
-            try {
-                object searchModel = GetSearchModel();
-                if (searchModel != null)
-                {
-                    var currentType = searchModel.GetType();
-                    var elementsProp = currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                                        .FirstOrDefault(p => typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(p.PropertyType));
-                    
-                    var elements = elementsProp?.GetValue(searchModel) as IEnumerable<NodeSearchElement>;
-                    if (elements == null) {
-                        var elementsField = currentType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                                            .FirstOrDefault(f => typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(f.FieldType));
-                        elements = elementsField?.GetValue(searchModel) as IEnumerable<NodeSearchElement>;
-                    }
-
-                    if (elements != null) {
-                        var match = elements.FirstOrDefault(el => el.FullName == nodeName || el.Name == nodeName);
-                        if (match != null) {
-                            // --- DEEP IDENTITY SCAN ---
-                            // We scan match and its potential 'Entry' for anything that looks like a GUID or real creation name
-                            List<object> targets = new List<object> { match };
-                            var entryProp = match.GetType().GetProperty("Entry", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                            var entry = entryProp?.GetValue(match);
-                            if (entry != null) targets.Add(entry);
-
-                            bool foundRealId = false;
-                            foreach (var target in targets) {
-                                var t = target.GetType();
-                                // Scan Properties
-                                foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
-                                    if (p.Name.Contains("Guid") || p.Name.Contains("ID") || p.Name == "CreationName") {
-                                        var val = p.GetValue(target)?.ToString();
-                                        if (!string.IsNullOrEmpty(val) && val != nodeName) {
-                                            finalCreationName = val;
-                                            foundRealId = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (foundRealId) break;
-                                // Scan Fields
-                                foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
-                                    if (f.Name.Contains("guid") || f.Name.Contains("id") || f.Name == "creationName") {
-                                        var val = f.GetValue(target)?.ToString();
-                                        if (!string.IsNullOrEmpty(val) && val != nodeName) {
-                                            finalCreationName = val;
-                                            foundRealId = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (foundRealId) break;
-                            }
-
-                            if (foundRealId) {
-                                MCPLogger.Info($"[CreateNode] Deep Scan Success: '{nodeName}' -> ID '{finalCreationName}'");
-                            } else {
-                                MCPLogger.Warning($"[CreateNode] Deep Scan found no unique ID for '{nodeName}', using default.");
-                            }
-                        }
-                    }
-                }
-            } catch (Exception ex) {
-                MCPLogger.Error($"[CreateNode] Resolution error: {ex.Message}");
-            }
-
-            MCPLogger.Info($"[CreateNode] Final creationName used: {finalCreationName}");
             var nativeCmd = new DynamoModel.CreateNodeCommand(new List<Guid> { dynamoGuid }, finalCreationName, x, y, false, false);
             _dynamoModel.ExecuteCommand(nativeCmd);
             
@@ -626,27 +578,63 @@ namespace DynamoMCPListener
             HandlePreview(n, dynamoGuid);
         }
 
-        private object GetSearchModel() {
+        // Helper for Python Code Update to reuse logic
+        private void UpdatePythonCode(NodeModel node, string code)
+        {
+            bool injected = false;
+            // Phase 1.1: Global Reflection
             try {
-                // In 3.0+, SearchModel is often in SearchViewModel via DynamoViewModel
-                var svmProp = _vm.GetType().GetProperty("SearchViewModel", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (svmProp != null) {
-                    var svmObj = svmProp.GetValue(_vm);
-                    if (svmObj != null) {
-                        var mProp = svmObj.GetType().GetProperty("Model", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                        if (mProp != null) return mProp.GetValue(svmObj);
-                    }
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                Type cmdType = null;
+                foreach (var asm in assemblies) {
+                    cmdType = asm.GetType("Dynamo.Models.DynamoModel+UpdatePythonNodeCommand") ?? 
+                              asm.GetType("Dynamo.Models.UpdatePythonNodeCommand");
+                    if (cmdType != null) break;
                 }
 
-                // Fallback to Scan
-                foreach (var p in _dynamoModel.GetType().GetProperties(BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Instance)) {
-                    if (p.PropertyType.Name.Contains("SearchModel")) return p.GetValue(_dynamoModel);
+                if (cmdType != null) {
+                    var constructor = cmdType.GetConstructors().FirstOrDefault(c => c.GetParameters().Length >= 2);
+                    if (constructor != null) {
+                        object[] p = constructor.GetParameters().Length == 3 
+                            ? new object[] { node.GUID, code, "CPython3" }
+                            : new object[] { node.GUID, code };
+                        var pyCmd = constructor.Invoke(p) as DynamoModel.RecordableCommand;
+                        _dynamoModel.ExecuteCommand(pyCmd);
+                        injected = true;
+                    }
                 }
-                foreach (var f in _dynamoModel.GetType().GetFields(BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Instance)) {
-                    if (f.FieldType.Name.Contains("SearchModel")) return f.GetValue(_dynamoModel);
+            } catch (Exception ex) {
+                MCPLogger.Warning($"[Python] Command reflection failed: {ex.Message}");
+            }
+
+            // Phase 1.2: Dynamic Property
+            if (!injected) {
+                try {
+                    var prop = node.GetType().GetProperty("Script") ?? node.GetType().GetProperty("Code");
+                    if (prop != null) {
+                        prop.SetValue(node, code);
+                        var notifyMethod = node.GetType().GetMethod("OnNodeModified", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                        if (notifyMethod != null) notifyMethod.Invoke(node, new object[] { true });
+                    }
+                } catch {}
+            }
+        }
+
+        private void AdjustInputPorts(NodeModel node, int targetCount)
+        {
+             try {
+                var addMethod = node.GetType().GetMethod("AddInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                var removeMethod = node.GetType().GetMethod("RemoveInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                if (addMethod != null) {
+                    while (node.InPorts.Count < targetCount) addMethod.Invoke(node, null);
                 }
-            } catch {}
-            return null;
+                if (removeMethod != null) {
+                    while (node.InPorts.Count > targetCount) removeMethod.Invoke(node, null);
+                }
+            } catch (Exception ex) {
+                MCPLogger.Warning($"[Python] Failed to adjust ports: {ex.Message}");
+            }
         }
 
         private void HandlePreview(JToken n, Guid guid)
@@ -660,6 +648,93 @@ namespace DynamoMCPListener
                     _dynamoModel.ExecuteCommand(updateCmd);
                 }
             }
+        }
+
+        private string ResolveCreationName(string query)
+        {
+            if (string.IsNullOrEmpty(query)) return query;
+            
+            try 
+            {
+                // 1. 取得 SearchModel (嘗試多種路徑)
+                object searchModel = null;
+                try {
+                    var modelType = _dynamoModel.GetType();
+                    var searchModelProp = modelType.GetProperty("SearchModel", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    searchModel = searchModelProp?.GetValue(_dynamoModel);
+                } catch {}
+
+                if (searchModel == null) {
+                    try {
+                        var vmProp = _vm.GetType().GetProperty("SearchViewModel", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        var svm = vmProp?.GetValue(_vm);
+                        if (svm != null) {
+                            var mProp = svm.GetType().GetProperty("Model", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            searchModel = mProp?.GetValue(svm);
+                        }
+                    } catch {}
+                }
+
+                if (searchModel == null) return query;
+
+                // 2. 取得搜尋條目集合 (Dynamic Scan)
+                // 模仿 HandleToolsCall 的暴力掃描邏輯，尋找任何 IEnumerable<NodeSearchElement>
+                IEnumerable<NodeSearchElement> elements = null;
+                
+                // Try Properties
+                foreach (var p in searchModel.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                {
+                    if (typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(p.PropertyType))
+                    {
+                        try { elements = p.GetValue(searchModel) as IEnumerable<NodeSearchElement>; } catch {}
+                        if (elements != null) break;
+                    }
+                }
+                // Try Fields
+                if (elements == null)
+                {
+                    foreach (var f in searchModel.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                    {
+                        if (typeof(IEnumerable<NodeSearchElement>).IsAssignableFrom(f.FieldType))
+                        {
+                            try { elements = f.GetValue(searchModel) as IEnumerable<NodeSearchElement>; } catch {}
+                            if (elements != null) break;
+                        }
+                    }
+                }
+
+                if (elements == null) return query;
+
+                // 3. 執行模糊比對
+                var matches = new List<dynamic>();
+                foreach (var entry in elements)
+                {
+                    string fn = entry.FullName ?? "";
+                    string n = entry.Name ?? "";
+                    
+                    if (fn.Equals(query, StringComparison.OrdinalIgnoreCase)) return GetCreationName(entry);
+                    if (n.Equals(query, StringComparison.OrdinalIgnoreCase)) matches.Add(new { Entry = entry, Weight = 10 });
+                    else if (fn.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) matches.Add(new { Entry = entry, Weight = 1 });
+                }
+
+                var bestMatch = matches.OrderByDescending(m => m.Weight).FirstOrDefault();
+                if (bestMatch != null) 
+                {
+                    string resolved = GetCreationName(bestMatch.Entry);
+                    if (!string.IsNullOrEmpty(resolved)) return resolved;
+                }
+            }
+            catch (Exception ex) {
+                MCPLogger.Warning($"[ResolveCreationName] Error: {ex.Message}");
+            }
+            
+            return query;
+        }
+
+        private string GetCreationName(object entry)
+        {
+            var cnProp = entry.GetType().GetProperty("CreationName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return cnProp?.GetValue(entry)?.ToString();
         }
 
         private string GetValuePropertyName(string fullName)

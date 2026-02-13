@@ -213,6 +213,33 @@ if (onModified != null) {
 - WPF 數據綁定機制接收到通知，重新讀取屬性值
 - UI 視圖更新，顯示最新代碼
 
+### 第四層：輸入埠動態調整 (Port Count Adjustment)
+
+**目標**：根據 `inputCount` 參數，自動增減 Python 節點的輸入埠位。
+
+#### 實作步驟
+
+使用反射調用 Python 節點特有的 `AddInput` 與 `RemoveInput` 方法：
+
+```csharp
+int targetCount = n["inputCount"].ToObject<int>();
+var addMethod = node.GetType().GetMethod("AddInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+var removeMethod = node.GetType().GetMethod("RemoveInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+if (addMethod != null) {
+    while (node.InPorts.Count < targetCount) {
+        addMethod.Invoke(node, null);
+    }
+}
+if (removeMethod != null) {
+    while (node.InPorts.Count > targetCount) {
+        removeMethod.Invoke(node, null);
+    }
+}
+```
+
+**優勢**：解決 `IndexError` 問題，讓 AI 能構建多輸入邏輯。
+
 ---
 
 ## 🔧 完整實作範例

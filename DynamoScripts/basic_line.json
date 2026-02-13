@@ -1,114 +1,48 @@
 {
-    "description": "Creates a Line between two points (0,0,0) and (10,10,0).",
+    "description": "Creates a 3D Line using Native Nodes with Params (Best Practice)",
     "content": {
         "nodes": [
             {
-                "id": "lx1",
-                "name": "Number",
-                "value": 0,
+                "id": "p1",
+                "name": "Point.ByCoordinates",
+                "params": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "overload": "3D",
                 "x": 100,
                 "y": 100
             },
             {
-                "id": "ly1",
-                "name": "Number",
-                "value": 0,
-                "x": 100,
-                "y": 150
-            },
-            {
-                "id": "lz1",
-                "name": "Number",
-                "value": 0,
-                "x": 100,
-                "y": 200
-            },
-            {
-                "id": "lp1",
+                "id": "p2",
                 "name": "Point.ByCoordinates",
-                "x": 300,
-                "y": 150
-            },
-            {
-                "id": "lx2",
-                "name": "Number",
-                "value": 10,
+                "params": {
+                    "x": 10,
+                    "y": 10,
+                    "z": 15
+                },
+                "overload": "3D",
                 "x": 100,
                 "y": 300
             },
             {
-                "id": "ly2",
-                "name": "Number",
-                "value": 10,
-                "x": 100,
-                "y": 350
-            },
-            {
-                "id": "lz2",
-                "name": "Number",
-                "value": 0,
-                "x": 100,
-                "y": 400
-            },
-            {
-                "id": "lp2",
-                "name": "Point.ByCoordinates",
-                "x": 300,
-                "y": 350
-            },
-            {
-                "id": "lline",
+                "id": "line1",
                 "name": "Line.ByStartPointEndPoint",
-                "x": 600,
-                "y": 250
+                "x": 400,
+                "y": 200
             }
         ],
         "connectors": [
             {
-                "from": "lx1",
-                "to": "lp1",
+                "from": "p1",
+                "to": "line1",
                 "fromPort": 0,
                 "toPort": 0
             },
             {
-                "from": "ly1",
-                "to": "lp1",
-                "fromPort": 0,
-                "toPort": 1
-            },
-            {
-                "from": "lz1",
-                "to": "lp1",
-                "fromPort": 0,
-                "toPort": 2
-            },
-            {
-                "from": "lx2",
-                "to": "lp2",
-                "fromPort": 0,
-                "toPort": 0
-            },
-            {
-                "from": "ly2",
-                "to": "lp2",
-                "fromPort": 0,
-                "toPort": 1
-            },
-            {
-                "from": "lz2",
-                "to": "lp2",
-                "fromPort": 0,
-                "toPort": 2
-            },
-            {
-                "from": "lp1",
-                "to": "lline",
-                "fromPort": 0,
-                "toPort": 0
-            },
-            {
-                "from": "lp2",
-                "to": "lline",
+                "from": "p2",
+                "to": "line1",
                 "fromPort": 0,
                 "toPort": 1
             }

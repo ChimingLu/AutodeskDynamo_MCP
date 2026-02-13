@@ -38,6 +38,13 @@
 - 必須使用 `fromPort` 與 `toPort` (取代舊有的 `fromIndex`)。
 - 3D 節點建議明確標註 `"overload": "3D"`。
 
+#### 4. Python Node 注入
+- **名稱**: 必須為 `"Python Script"`。
+- **欄位**: 必須包含 `"pythonCode"` (或 `"script"`)。
+- **輸入數量**: 可選 `"inputCount"` (例如 `4`)。
+- **引擎**: C# 自動設為 `"CPython3"`。
+- **範例**: `{"id": "py01", "name": "Python Script", "pythonCode": "OUT = IN[0]", "inputCount": 2}`
+
 ---
 
 ## 🛠️ 故障排除

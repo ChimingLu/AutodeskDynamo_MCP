@@ -424,7 +424,7 @@ class MCPBridgeServer:
                     "properties": {
                         "instructions": {
                             "type": "string",
-                            "description": "JSON 格式的完整圖形定義。必須包含兩個欄位：'nodes'（節點陣列）和 'connectors'（連線陣列）。"
+                            "description": "JSON 格式的完整圖形定義。必須包含 'nodes' 和 'connectors'。Python 節點需指定 'pythonCode' (或 'script') 欄位，可選 'inputCount' 調整輸入埠數量。"
                         },
                         "dryRun": {
                             "type": "boolean",
@@ -450,7 +450,12 @@ class MCPBridgeServer:
             {
                 "name": "analyze_workspace",
                 "description": "取得 Dynamo 工作區中所有節點的當前狀態。",
-                "inputSchema": {"type": "object", "properties": {}},
+                "inputSchema": {
+                    "type": "object", 
+                    "properties": {
+                        "sessionId": {"type": "string", "description": "選用。指定 Session ID"}
+                    }
+                },
                 "readOnlyHint": True
             },
             {
@@ -482,9 +487,32 @@ class MCPBridgeServer:
             },
             {
                 "name": "get_mcp_guidelines",
-                "description": "取得規範內容。",
+                "description": "取得 GEMINI.md 與快速參考內容。",
                 "inputSchema": {"type": "object", "properties": {}},
                 "readOnlyHint": True
+            },
+            {
+                "name": "get_mcp_tech_guide",
+                "description": "取得 MCP Tools 技術指南 (domain/mcp_tools.md)，包含 Python 節點自動化等多項技術規範。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "readOnlyHint": True
+            },
+            {
+                "name": "create_python_node",
+                "description": "建立一個 Python Script 節點。支援代碼注入與動態輸入埠數量調整。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string", "description": "Python 程式碼"},
+                        "inputCount": {"type": "integer", "description": "輸入埠數量 (IN[0]...IN[N-1])", "default": 1},
+                        "nodeId": {"type": "string", "description": "選用。節點的唯一識別碼"},
+                        "x": {"type": "number", "description": "X 座標", "default": 0},
+                        "y": {"type": "number", "description": "Y 座標", "default": 0},
+                        "sessionId": {"type": "string", "description": "選用。指定會話 ID"}
+                    },
+                    "required": ["code"]
+                },
+                "destructiveHint": True
             },
             {
                 "name": "get_script_library",
@@ -494,7 +522,7 @@ class MCPBridgeServer:
             },
             {
                 "name": "run_autotest",
-                "description": "執行專案自動化測試 (test_roadmap_features.py)。驗證 Dynamo 節點放置、Python 注入、外掛支援與幾何運算功能。",
+                "description": "執行專案自動化測試 (test_roadmap_features.py)。驗證 Dynamo 節點放置、Python 注入、外掛支援與幾幾何運算功能。",
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -563,10 +591,12 @@ class MCPBridgeServer:
         try:
             if name == "execute_dynamo_instructions":
                 return await execute_dynamo_instructions(**args)
+            elif name == "create_python_node":
+                return await create_python_node_tool(**args)
             elif name == "search_nodes":
                 return await search_nodes_async(**args)
             elif name == "analyze_workspace":
-                return await analyze_workspace()
+                return await analyze_workspace(**args)
             elif name == "get_graph_status":
                 _, res = await _check_dynamo_connection()
                 return res
@@ -574,6 +604,8 @@ class MCPBridgeServer:
                 return await clear_workspace()
             elif name == "get_mcp_guidelines":
                 return get_mcp_guidelines()
+            elif name == "get_mcp_tech_guide":
+                return get_mcp_tech_guide()
             elif name == "get_script_library":
                 return get_script_library()
             elif name == "run_autotest":
@@ -726,41 +758,82 @@ def _expand_native_nodes(instruction: dict) -> dict:
         params = node.get("params", {})
         node_id = node.get("id", str(uuid.uuid4()))
         
-        # 只有在 metadata 中且有 params 時才擴展
-        if name in metadata and params:
+        # 只要在 metadata 中，就嘗試進行 Overload 解析，無論是否有 params
+        if name in metadata:
             node_info = metadata[name]
             input_ports = node_info.get("inputs", [])
             
-            # 為每個參數創建 Number 節點
-            for i, port_name in enumerate(input_ports):
-                if port_name in params:
-                    param_id = f"{node_id}_{port_name}_{timestamp}"
-                    param_node = {
-                        "id": param_id,
-                        "name": "Number",
-                        "value": str(params[port_name]),
-                        "x": float(node.get("x", 0)) - 250,
-                        "y": float(node.get("y", 0)) + (i * 80),
-                        "preview": node.get("preview", True)
-                    }
-                    expanded_nodes.append(param_node)
+            # --- Overload Resolution Start ---
+            # 優先順序：1. 明確指定 overload  2. 自動推斷 (params 數量比對)
+            if "overloads" in node_info:
+                explicit_overload = node.get("overload")  # e.g. "3D", "2D"
+                best_match = None
+                
+                # 方式 1：明確指定
+                if explicit_overload:
+                    for overload in node_info["overloads"]:
+                        if overload.get("id") == explicit_overload:
+                            best_match = overload["fullName"]
+                            break
+                            
+                # 方式 2：自動推斷 (根據 params 數量推斷 inputs)
+                # 只有當我們有 params 時才能使用此方式
+                if not best_match and params:
+                    # 計算本次使用的參數集合
+                    current_inputs = set()
+                    for port_name in input_ports:
+                        if port_name in params:
+                            current_inputs.add(port_name)
                     
-                    # 建立連線 (同時包含索引與名稱，提供 Fallback 能力)
-                    expanded_connectors.append({
-                        "from": param_id,
-                        "to": node_id,
-                        "fromPort": 0,
-                        "toPort": i,
-                        "toPortName": port_name
-                    })
-            
-            # 清除原 node 的 params 避免重複處理
-            clean_node = {k: v for k, v in node.items() if k != "params"}
-            expanded_nodes.append(clean_node)
+                    for overload in node_info["overloads"]:
+                        ov_inputs = set(overload.get("inputs", []))
+                        if ov_inputs == current_inputs:
+                            best_match = overload["fullName"]
+                            break
+                
+                if best_match:
+                    node["creationName"] = best_match
+            # --- Overload Resolution End ---
+
+            # --- Params Expansion Start ---
+            if params:
+                # 為每個參數創建 Number 節點
+                for i, port_name in enumerate(input_ports):
+                    if port_name in params:
+                        param_id = f"{node_id}_{port_name}_{timestamp}"
+                        param_node = {
+                            "id": param_id,
+                            "name": "Number",
+                            "value": str(params[port_name]),
+                            "x": float(node.get("x", 0)) - 250,
+                            "y": float(node.get("y", 0)) + (i * 80),
+                            "preview": node.get("preview", True)
+                        }
+                        expanded_nodes.append(param_node)
+                        
+                        # 建立連線
+                        expanded_connectors.append({
+                            "from": param_id,
+                            "to": node_id,
+                            "fromPort": 0,
+                            "toPort": i,
+                            "toPortName": port_name
+                        })
+                
+                # [Fix] 確保 ID 同步
+                node["id"] = node_id
+                # 清除原 node 的 params
+                clean_node = {k: v for k, v in node.items() if k != "params"}
+                expanded_nodes.append(clean_node)
+            else:
+                # 無 params 但有 metadata，直接加入 (creationName 已更新)
+                expanded_nodes.append(node)
+                
         else:
+            # 不在 metadata 中，原樣加入
             expanded_nodes.append(node)
             
-    return {"nodes": expanded_nodes, "connectors": expanded_connectors}
+    return {"nodes": expanded_nodes, "connectors": expanded_connectors, "expanded_by_mcp": True}
 
 def _detect_potential_issues(nodes: list, connectors: list) -> list:
     """偵測潛在問題 (Human-in-the-Loop)"""
@@ -794,10 +867,14 @@ def _generate_dry_run_report(json_data: dict, base_x: float, base_y: float) -> d
     3. 潛在風險警告
     4. 預估畫布佔用範圍
     """
-    expanded = _expand_native_nodes(json_data)
-    
-    nodes = expanded.get("nodes", [])
-    connectors = expanded.get("connectors", [])
+    # 避免重複展開
+    if "expanded_by_mcp" in json_data:
+        nodes = json_data.get("nodes", [])
+        connectors = json_data.get("connectors", [])
+    else:
+        expanded = _expand_native_nodes(json_data)
+        nodes = expanded.get("nodes", [])
+        connectors = expanded.get("connectors", [])
     
     # 套用座標偏移
     for node in nodes:
@@ -861,7 +938,13 @@ async def execute_dynamo_instructions(
     if isinstance(json_data, list):
         json_data = {"nodes": json_data, "connectors": []}
     
+    # [Fix] 核心修復：強制執行原生節點展開與過載修正
+    # 這是之前導致 params 失效與 Overload 錯誤的主因
+    json_data = _expand_native_nodes(json_data)
+
     if dryRun:
+        # Dry Run 這裡會再次展開，但沒關係，或者我們可以優化 _generate_dry_run_report
+        # 為求穩，直接回傳即可，因為 dry run report 內部也會做檢查
         report = _generate_dry_run_report(json_data, base_x, base_y)
         return json.dumps(report, ensure_ascii=False, indent=2)
     
@@ -884,7 +967,7 @@ async def execute_dynamo_instructions(
     new_version = version_result["newVersion"]
     
     try:
-        # 座標偏移與策略標註
+        # === 階段 1: 節點創建與更新 (Upsert 邏輯基礎) ===
         if "nodes" in json_data:
             for node in json_data["nodes"]:
                 route_node_creation(node)
@@ -894,56 +977,50 @@ async def execute_dynamo_instructions(
         if clear_before_execute: 
             await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
         
-        # 首次嘗試執行
-        response = await ws_manager.send_command_async(session_id, json_data)
+        # 僅提取節點指令進行第一波執行
+        node_only_data = {
+            "nodes": json_data.get("nodes", []),
+            "connectors": [] 
+        }
         
-        # [核心優化] 差異化重試與降級機制 (Differentiated Fallback)
-        if response.get("status") == "error" and allow_fallback:
-            log(f"[Fallback] 軌道 B 執行失敗，嘗試降級至軌道 A (Code Block)... 錯誤: {response.get('message')}")
-            
-            # [修復] 清除失敗的節點，避免重複創建
-            log("[Fallback] 清除失敗節點...")
-            await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
-            
-            fallback_nodes = []
-            for node in json_data.get("nodes", []):
-                # 僅針對原生幾何節點進行轉換
-                if node.get("name") in _load_common_nodes_metadata():
-                    code = _generate_ds_code(node)
-                    fallback_node = {
-                        "id": node.get("id"),
-                        "name": "Number",
-                        "value": code,
-                        "x": node.get("x"),
-                        "y": node.get("y"),
-                        "preview": node.get("preview", True)
-                    }
-                    fallback_nodes.append(fallback_node)
-                else:
-                    # 非原生節點保留（例如 Python Script 保持不變，或已轉換的 Number 節點）
-                    fallback_nodes.append(node)
-            
-            # 建立降級後的指令集（通常 Code Block 模式不依賴 connectors，因為邏輯已內嵌）
-            # 但如果是手動指定的連線仍需保留
-            fallback_data = {
-                "nodes": fallback_nodes,
-                "connectors": json_data.get("connectors", []) if not any(n.get("name") in _load_common_nodes_metadata() for n in json_data.get("nodes", [])) else []
+        node_response = await ws_manager.send_command_async(session_id, node_only_data)
+        
+        # [核心優化] 階段間隙：等待 Dynamo 實體化節點 (特別是動態 Port 的 Code Block)
+        await asyncio.sleep(0.3) 
+        
+        # === 階段 2: 建立連線 ===
+        if node_response.get("status") == "ok":
+            # 建立連線指令集
+            connector_data = {
+                "nodes": [],
+                "connectors": json_data.get("connectors", [])
             }
             
-            retry_response = await ws_manager.send_command_async(session_id, fallback_data)
-            if retry_response.get("status") == "ok":
-                return json.dumps({
-                    "status": "ok",
-                    "message": "成功 (已透過軌道 A 降級重試恢復)",
-                    "version": new_version,
-                    "clientId": clientId
-                }, ensure_ascii=False)
+            # 輔助：更新 Lacing (如果節點指令中包含 lacing)
+            lacing_update = [{"id": n["id"], "lacing": n["lacing"]} for n in json_data.get("nodes", []) if "lacing" in n]
+            if lacing_update:
+                await ws_manager.send_command_async(session_id, {"nodes": lacing_update, "connectors": []})
+
+            if connector_data["connectors"]:
+                response = await ws_manager.send_command_async(session_id, connector_data)
             else:
-                return json.dumps({
-                    "status": "error",
-                    "message": f"失敗 (重試後仍錯誤): {retry_response.get('message')}",
-                    "version": new_version
-                }, ensure_ascii=False)
+                response = node_response
+        else:
+            response = node_response
+        
+        # [安全性優化] 移除自動清空與降級機制 (不再執行 clear_graph)
+        if response.get("status") == "error":
+             log(f"[WARNING] 指令執行失敗，保留手動成果。錯誤: {response.get('message')}")
+             error_details = response.get('errors', [])
+             detailed_msg = f"執行失敗，保留工作區現狀: {response.get('message')}"
+             if error_details:
+                 detailed_msg += f" | 詳細錯誤: {json.dumps(error_details, ensure_ascii=False)}"
+                 
+             return json.dumps({
+                 "status": "error", 
+                 "message": detailed_msg,
+                 "version": new_version
+             }, ensure_ascii=False)
         
         if response.get("status") == "ok":
             return json.dumps({
@@ -989,23 +1066,29 @@ async def search_nodes_async(query: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-async def analyze_workspace() -> str:
-    # 每次分析前清理過期會話
-    await ws_manager.cleanup_stale_sessions()
+async def analyze_workspace(sessionId: str = None) -> str:
+    # [優化] 僅在存在多個會話時執行清理，減少單會話場景的延遲
+    with ws_manager._lock:
+        session_count = len(ws_manager.active_sessions)
+    if session_count > 1:
+        await ws_manager.cleanup_stale_sessions()
     
     with ws_manager._lock:
         sessions = list(ws_manager.active_sessions.keys())
-        session_count = len(sessions)
         session_info = dict(ws_manager.session_info)
     
-    is_ok, res = await _check_dynamo_connection()
+    target_id = sessionId if sessionId and sessionId in sessions else (sessions[-1] if sessions else None)
+    if not target_id:
+        return "[FAIL] 失敗: 目前沒有活動中的 Dynamo 連線。"
+
+    is_ok, res = await _check_dynamo_connection(target_id)
     if not is_ok:
         return f"[FAIL] 失敗: {res}"
     
-    # [核心優化] 幽靈連線偵測與詳細狀態
-    if session_count > 1:
+    # 注入會話管理資訊
+    if len(sessions) > 1:
         data = json.loads(res)
-        data["warning"] = f"[WARNING] 警告: 偵測到 {session_count} 個活動中的會話。指令目前預設發送至最後一個連線 (Session: {sessions[-1]})。若不正確，請使用 list_sessions 查看並指定 sessionId。"
+        data["warning"] = f"[WARNING] 偵測到 {len(sessions)} 個會話。目前分析對象: {target_id}"
         data["all_sessions"] = [
             {"id": sid, "fileName": info["fileName"], "connected": time.strftime('%H:%M:%S', time.localtime(info['connectedAt']))}
             for sid, info in session_info.items()
@@ -1057,7 +1140,37 @@ async def clear_workspace() -> str:
 
 def get_mcp_guidelines() -> str:
     g, q = _load_guidelines()
-    return f"# GUIDELINES\\n\\n{g}\\n\\n# QUICK REF\\n\\n{q}"
+    return f"# GUIDELINES\n\n{g}\n\n# QUICK REF\n\n{q}"
+
+def get_mcp_tech_guide() -> str:
+    """讀取 MCP Tools 技術指南"""
+    try:
+        path = os.path.join(PROJECT_ROOT, "domain", "mcp_tools.md")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        return "Tech guide not found."
+    except Exception as e:
+        return f"Error reading tech guide: {str(e)}"
+
+async def create_python_node_tool(code: str, inputCount: int = 1, nodeId: str = None, x: float = 0, y: float = 0, sessionId: str = None) -> dict:
+    """專用工具：建立 Python 節點"""
+    import uuid
+    actual_id = nodeId if nodeId else f"python_{uuid.uuid4().hex[:8]}"
+    
+    instruction = {
+        "nodes": [{
+            "id": actual_id,
+            "name": "Python Script",
+            "pythonCode": code,
+            "inputCount": inputCount,
+            "x": x,
+            "y": y
+        }],
+        "connectors": []
+    }
+    
+    return await execute_dynamo_instructions(json.dumps(instruction), sessionId=sessionId)
 
 def get_script_library() -> str:
     scripts = []
