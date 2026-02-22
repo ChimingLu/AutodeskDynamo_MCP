@@ -15,7 +15,7 @@
 1.  **Backend (Python Server)**: MCP Bridge，負責將 MCP 指令轉換為 WebSocket 訊息。
 2.  **Frontend (Dynamo ViewExtension)**: C# 插件，負責接收指令並操作 Dynamo API。
 3.  **Knowledge Base (Memory Bank)**: 結構化的知識管理系統，支援 SOP 與長期記憶。
-4.  **Generative Workflows (Zaha Facade)**: 驗證系統能力的實際應用案例。
+4.  **Generative Workflows**: 驗證系統能力的實際應用案例。
 
 ## 🚫 非目標 (Non-Goals)
 - **取代 Dynamo**: 目標是輔助，而非重新發明 Dynamo 引擎。

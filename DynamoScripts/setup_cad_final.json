@@ -1,0 +1,69 @@
+{
+    "nodes": [
+        {
+            "id": "instr_final",
+            "name": "Code Block",
+            "value": "\"// Step 1: Click 'Select' and pick the CAD Link in Revit view.\n// Step 2: Ensure Layer Name matches your CAD file.\n// Step 3: Run to generate Model Curves.\";",
+            "x": 100,
+            "y": 100
+        },
+        {
+            "id": "sel_final",
+            "name": "Select Model Element",
+            "x": 100,
+            "y": 250
+        },
+        {
+            "id": "layer_final",
+            "name": "Code Block",
+            "value": "\"0\";",
+            "x": 100,
+            "y": 400
+        },
+        {
+            "id": "bool_final",
+            "name": "Code Block",
+            "value": "true;",
+            "x": 100,
+            "y": 550
+        },
+        {
+            "id": "cad_final",
+            "name": "BimorphNodes.CAD.CurvesFromCADLayers",
+            "x": 500,
+            "y": 250
+        },
+        {
+            "id": "watch_final",
+            "name": "Watch",
+            "x": 950,
+            "y": 250
+        }
+    ],
+    "connectors": [
+        {
+            "from": "sel_final",
+            "to": "cad_final",
+            "fromPort": 0,
+            "toPort": 0
+        },
+        {
+            "from": "layer_final",
+            "to": "cad_final",
+            "fromPort": 0,
+            "toPort": 1
+        },
+        {
+            "from": "bool_final",
+            "to": "cad_final",
+            "fromPort": 0,
+            "toPort": 2
+        },
+        {
+            "from": "cad_final",
+            "to": "watch_final",
+            "fromPort": 0,
+            "toPort": 0
+        }
+    ]
+}

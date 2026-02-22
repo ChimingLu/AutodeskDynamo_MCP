@@ -96,9 +96,7 @@ async def test_clockwork():
     has_clockwork = "Passthrough" in str(search_res)
     
     if not has_clockwork:
-        print(f"⚠️ {time.time()-start:.2f}s - Clockwork.Passthrough not found via search. Skipping creation test.")
-        # We consider this a "pass" with warning, or skip
-        return True
+        print(f"⚠️ {time.time()-start:.2f}s - Clockwork.Passthrough not found via search. Proceeding with GUID creation (Workaround for BUG-003).")
         
     # [Modified] Using GUID for Clockwork Passthrough as Dynamo fails to resolve via name string.
     # GUID: ecce77dc-1290-438e-a056-970b256fd553 (Found via analyze_passthrough.py)

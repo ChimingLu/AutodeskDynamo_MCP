@@ -71,6 +71,12 @@ foreach ($dll in $ConflictDlls) {
 
 # 3. Deploy to Dynamo (Primary Location: Dynamo Revit 3.3 or whichever is set in $DynamoPackagesDir)
 Write-Host "`n[3/4] Deploying to Dynamo Packages (Primary)..."
+
+# 確保套件目錄存在 (Ensure packages directory exists)
+if (-not (Test-Path $DynamoPackagesDir)) {
+    New-Item -ItemType Directory -Path $DynamoPackagesDir -Force | Out-Null
+    Write-Host "   - Created packages directory: $DynamoPackagesDir" -ForegroundColor Cyan
+}
 if (Test-Path $TargetPackageDir) {
     Remove-Item $TargetPackageDir -Recurse -Force
 }

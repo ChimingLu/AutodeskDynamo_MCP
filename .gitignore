@@ -28,6 +28,7 @@ build/
 # Logs
 *.log
 DynamoMCP.log
+logs/
 
 # OS
 .DS_Store

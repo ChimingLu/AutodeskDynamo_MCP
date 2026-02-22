@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -11,6 +11,7 @@ using Dynamo.ViewModels;
 using Dynamo.Search;
 using Dynamo.Search.SearchElements;
 using Dynamo.Graph.Nodes.CustomNodes;
+using Dynamo.Graph.Annotations;
 
 namespace DynamoMCPListener
 {
@@ -21,7 +22,7 @@ namespace DynamoMCPListener
         private DynamoModel _dynamoModel;
         private JArray _commonNodesCache;
         private string _sessionId;
-        private Dictionary<string, Guid> _nodeIdMap; // 字串 ID -> Dynamo GUID 映射表
+        private Dictionary<string, Guid> _nodeIdMap; // 字串 ID -> Dynamo GUID ?��?�?
 
         public GraphHandler(DynamoViewModel vm, string sessionId)
         {
@@ -88,6 +89,17 @@ namespace DynamoMCPListener
                     };
 
                     return JsonConvert.SerializeObject(statusData);
+                }
+
+                if (action == "debug_group_api")
+                {
+                    return DebugGroupApi();
+                }
+
+                if (action == "create_group")
+                {
+                    CreateGroup(data);
+                    return "{\"status\": \"ok\", \"message\": \"Group created\"}";
                 }
                 
                 // === MCP Resources Layer: Structured Data Queries ===
@@ -188,7 +200,7 @@ namespace DynamoMCPListener
                     Guid targetGuid;
                     if (!Guid.TryParse(targetId, out targetGuid))
                     {
-                        // 嘗試從 ID 映射表查找
+                        // ?�試�?ID ?��?表查??
                         if (!_nodeIdMap.TryGetValue(targetId, out targetGuid))
                         {
                             return "{\"status\": \"error\", \"message\": \"Node not found\"}";
@@ -371,12 +383,12 @@ namespace DynamoMCPListener
                         }).ToList();
 
                     // Format display result for AI awareness
-                    var displayLines = new List<string> { $"🔍 搜尋 '{filter}' 找到 {results.Count} 個結果 (僅列出前 50 個):\n" };
+                    var displayLines = new List<string> { $"?? ?��? '{filter}' ?�到 {results.Count} ?��???(?��??��? 50 ??:\n" };
                     foreach (var n in results) {
                         displayLines.Add($"- **{n.name}**");
                         displayLines.Add($"  fullName: `{n.fullName}`");
                         displayLines.Add($"  creationName: `{n.creationName}`");
-                        if (!string.IsNullOrEmpty(n.description)) displayLines.Add($"  說明: {n.description}");
+                        if (!string.IsNullOrEmpty(n.description)) displayLines.Add($"  說�?: {n.description}");
                         displayLines.Add("");
                     }
 
@@ -656,7 +668,7 @@ namespace DynamoMCPListener
             
             try 
             {
-                // 1. 取得 SearchModel (嘗試多種路徑)
+                // 1. ?��? SearchModel (?�試多種路�?)
                 object searchModel = null;
                 try {
                     var modelType = _dynamoModel.GetType();
@@ -677,8 +689,8 @@ namespace DynamoMCPListener
 
                 if (searchModel == null) return query;
 
-                // 2. 取得搜尋條目集合 (Dynamic Scan)
-                // 模仿 HandleToolsCall 的暴力掃描邏輯，尋找任何 IEnumerable<NodeSearchElement>
+                // 2. ?��??��?條目?��? (Dynamic Scan)
+                // 模仿 HandleToolsCall ?�暴?��??��?輯�?尋找任�? IEnumerable<NodeSearchElement>
                 IEnumerable<NodeSearchElement> elements = null;
                 
                 // Try Properties
@@ -705,7 +717,7 @@ namespace DynamoMCPListener
 
                 if (elements == null) return query;
 
-                // 3. 執行模糊比對
+                // 3. ?��?模�?比�?
                 var matches = new List<dynamic>();
                 foreach (var entry in elements)
                 {
@@ -761,7 +773,7 @@ namespace DynamoMCPListener
             var toNode = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(n => n.GUID == toId);
             if (toNode != null && !string.IsNullOrEmpty(toPortName))
             {
-                // 嘗試根據名稱尋找輸入埠位
+                // ?�試?��??�稱尋找輸入?��?
                 var port = toNode.InPorts.FirstOrDefault(p => 
                     p.Name.Equals(toPortName, StringComparison.OrdinalIgnoreCase));
                 
@@ -779,7 +791,7 @@ namespace DynamoMCPListener
                 }
             }
 
-            // 執行連線指令 (分別執行 Begin 與 End)
+            // ?��?????�令 (?�別?��? Begin ??End)
             try
             {
                 _dynamoModel.ExecuteCommand(new DynamoModel.MakeConnectionCommand(fromId, fromIdx, PortType.Output, DynamoModel.MakeConnectionCommand.Mode.Begin));
@@ -798,8 +810,107 @@ namespace DynamoMCPListener
                 string packageRoot = System.IO.Path.GetDirectoryName(assemblyDir);
                 string jsonPath = System.IO.Path.Combine(packageRoot, "common_nodes.json");
                 if (System.IO.File.Exists(jsonPath))
-                    _commonNodesCache = JArray.Parse(System.IO.File.ReadAllText(jsonPath));
-            } catch { } // Safe suppression for cache loading
+                {
+                    using (System.IO.StreamReader r = new System.IO.StreamReader(jsonPath))
+                    {
+                        string json = r.ReadToEnd();
+                        _commonNodesCache = JArray.Parse(json);
+                    }
+                }
+            } catch { _commonNodesCache = new JArray(); }
+        }
+
+        private string DebugGroupApi()
+        {
+            var sb = new System.Text.StringBuilder();
+            var assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
+            
+            foreach (var asm in assemblies)
+            {
+                try
+                {
+                    var types = asm.GetTypes();
+                    foreach (var t in types)
+                    {
+                        if (t.Name == "AnnotationModel" || t.Name == "CreateAnnotationCommand" || t.Name == "AddModelToGroupCommand")
+                        {
+                            sb.AppendLine($"[{asm.GetName().Name}] {t.FullName}");
+                            foreach (var ctor in t.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                            {
+                                var pStr = string.Join(", ", ctor.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
+                                sb.AppendLine($"  .ctor({pStr})");
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Also report workspace annotations count
+            sb.AppendLine($"\nCurrent Annotations: {_dynamoModel.CurrentWorkspace.Annotations.Count()}");
+            
+            var result = sb.ToString();
+            MCPLogger.Info(result);
+            return JsonConvert.SerializeObject(new { status = "ok", debug = result });
+        }
+
+        private void CreateGroup(JToken data)
+        {
+            var nodeIds = data["nodeIds"]?.ToObject<List<string>>() ?? new List<string>();
+            string title = data["title"]?.ToString() ?? "New Group";
+            string description = data["description"]?.ToString() ?? "";
+            string color = data["color"]?.ToString() ?? "#FFC1D5E0";
+            
+            // Resolve node IDs
+            var nodesToGroup = new List<NodeModel>();
+            foreach (var idStr in nodeIds)
+            {
+                Guid guid;
+                if (Guid.TryParse(idStr, out Guid parsed)) guid = parsed;
+                else if (_nodeIdMap.TryGetValue(idStr, out Guid mapped)) guid = mapped;
+                else continue;
+
+                var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(n => n.GUID == guid);
+                if (node != null) nodesToGroup.Add(node);
+            }
+
+            if (!nodesToGroup.Any())
+            {
+                MCPLogger.Warning("[CreateGroup] No valid nodes found.");
+                return;
+            }
+
+            // Calculate bounding box for group position
+            double minX = nodesToGroup.Min(n => n.X);
+            double minY = nodesToGroup.Min(n => n.Y);
+            Guid annotationGuid = Guid.NewGuid();
+
+            // Deselect all models to prevent group nesting
+            foreach (var n in _dynamoModel.CurrentWorkspace.Nodes)
+                n.IsSelected = false;
+            foreach (var a in _dynamoModel.CurrentWorkspace.Annotations)
+                a.IsSelected = false;
+
+            // Step 1: Create the annotation (group container)
+            // Correct API: CreateAnnotationCommand(Guid, string title, string description, double x, double y, bool defaultPosition)
+            _dynamoModel.ExecuteCommand(new DynamoModel.CreateAnnotationCommand(
+                annotationGuid, title, description, minX - 10, minY - 55, false));
+
+            // Step 2: Select the annotation so AddModelToGroupCommand knows the target group
+            _dynamoModel.ExecuteCommand(new DynamoModel.SelectModelCommand(annotationGuid.ToString(), 0));
+            
+            // Step 3: AddModelToGroupCommand(IEnumerable<Guid>) adds to currently selected group
+            var nodeGuids = nodesToGroup.Select(n => n.GUID);
+            _dynamoModel.ExecuteCommand(new DynamoModel.AddModelToGroupCommand(nodeGuids));
+
+            // Step 4: Set background color
+            if (!string.IsNullOrEmpty(color))
+            {
+                _dynamoModel.ExecuteCommand(new DynamoModel.UpdateModelValueCommand(
+                    _dynamoModel.CurrentWorkspace.Guid, annotationGuid, "Background", color));
+            }
+
+            MCPLogger.Info($"[CreateGroup] Created group '{title}' with {nodesToGroup.Count} nodes at ({minX:F0}, {minY:F0}).");
         }
     }
 }

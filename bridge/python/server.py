@@ -19,6 +19,7 @@ Dynamo MCP WebSocket Manager
 
 import time, os, json, glob, asyncio, websockets, threading, uuid, subprocess, sys
 from typing import Any, Dict, Optional, List
+from pathlib import Path
 
 # 全域日誌函數
 def log(m): print(m, file=sys.stderr)
@@ -96,6 +97,7 @@ session_state_manager = SessionStateManager()
 GUIDELINE_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "GEMINI.md"))
 QUICK_REF_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "QUICK_REFERENCE.md"))
 CONFIG_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "mcp_config.json"))
+MEMORY_BANK_PATH = Path(__file__).parent.parent.parent / "memory-bank"
 
 CONFIG = {}
 if os.path.exists(CONFIG_PATH):
@@ -109,6 +111,90 @@ script_rel_path = CONFIG.get("paths", {}).get("scripts", "DynamoScripts")
 SCRIPT_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", script_rel_path))
 if not os.path.exists(SCRIPT_DIR):
     os.makedirs(SCRIPT_DIR)
+
+# ==========================================
+# Memory Bank 快取系統（混合策略）
+# ==========================================
+
+# 全域快取變數
+MEMORY_BANK_SUMMARY = None
+MEMORY_BANK_LOAD_TIME = None
+
+def _read_file_safe(file_path: Path) -> str:
+    """安全讀取檔案，失敗回傳空字串"""
+    try:
+        if file_path.exists():
+            return file_path.read_text(encoding='utf-8')
+        return ""
+    except Exception as e:
+        log(f"[WARN] Failed to read {file_path}: {e}")
+        return ""
+
+def _load_lessons(lessons_path: Path) -> list:
+    """載入所有 lessons/*.md 檔案標題與摘要"""
+    if not lessons_path.exists():
+        return []
+    
+    lessons = []
+    for md_file in sorted(lessons_path.glob("*.md")):
+        content = _read_file_safe(md_file)
+        if not content:
+            continue
+        
+        # 提取第一行標題與前 10 行作為摘要
+        lines = content.split('\n')
+        title = lines[0].strip('# ').strip() if lines else md_file.stem
+        summary = '\n'.join(lines[:10])
+        
+        lessons.append({
+            "file": md_file.name,
+            "title": title,
+            "summary": summary
+        })
+    
+    return lessons
+
+def load_memory_bank() -> dict:
+    """
+    啟動時讀取並快取 memory-bank/ 資料夾摘要
+    Returns: 載入狀態字典
+    """
+    global MEMORY_BANK_SUMMARY, MEMORY_BANK_LOAD_TIME
+    
+    if not MEMORY_BANK_PATH.exists():
+        log("[WARN] memory-bank/ directory not found")
+        MEMORY_BANK_SUMMARY = {"status": "error", "message": "memory-bank 資料夾不存在"}
+        return MEMORY_BANK_SUMMARY
+    
+    try:
+        log("[Memory Bank] Loading memory bank...")
+        
+        # 讀取核心文件
+        summary = {
+            "status": "ok",
+            "loadTime": time.time(),
+            "projectBrief": _read_file_safe(MEMORY_BANK_PATH / "projectbrief.md"),
+            "productContext": _read_file_safe(MEMORY_BANK_PATH / "productContext.md"),
+            "systemPatterns": _read_file_safe(MEMORY_BANK_PATH / "systemPatterns.md"),
+            "techContext": _read_file_safe(MEMORY_BANK_PATH / "techContext.md"),
+            "activeContext": _read_file_safe(MEMORY_BANK_PATH / "activeContext.md"),
+            "progress": _read_file_safe(MEMORY_BANK_PATH / "progress.md"),
+            "lessons": _load_lessons(MEMORY_BANK_PATH / "lessons")
+        }
+        
+        MEMORY_BANK_SUMMARY = summary
+        MEMORY_BANK_LOAD_TIME = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(summary["loadTime"]))
+        
+        log(f"[Memory Bank] ✅ Loaded {len(summary['lessons'])} lessons")
+        log(f"[Memory Bank] Load time: {MEMORY_BANK_LOAD_TIME}")
+        
+        return {"status": "ok", "loadTime": MEMORY_BANK_LOAD_TIME, "lessonsCount": len(summary["lessons"])}
+        
+    except Exception as e:
+        error_msg = f"Failed to load memory bank: {e}"
+        log(f"[ERROR] {error_msg}")
+        MEMORY_BANK_SUMMARY = {"status": "error", "message": error_msg}
+        return MEMORY_BANK_SUMMARY
 
 # ==========================================
 # 工具邏輯與輔助函式
@@ -322,7 +408,7 @@ class WebSocketManager:
                     self.session_info[session_id]["stats"]["errors"] += 1
             return {"status": "error", "message": "Dynamo response timeout."}
 
-    async def cleanup_stale_sessions(self, timeout=30.0):
+    async def cleanup_stale_sessions(self, timeout=300.0):
         """自動清理超過超時時間未反應的會話"""
         now = time.time()
         to_remove = []
@@ -424,7 +510,7 @@ class MCPBridgeServer:
                     "properties": {
                         "instructions": {
                             "type": "string",
-                            "description": "JSON 格式的完整圖形定義。必須包含 'nodes' 和 'connectors'。Python 節點需指定 'pythonCode' (或 'script') 欄位，可選 'inputCount' 調整輸入埠數量。"
+                            "description": "JSON 格式的完整圖形定義。必須包含 'nodes' 和 'connectors'。Python 節點需指定 'pythonCode' 欄位。"
                         },
                         "dryRun": {
                             "type": "boolean",
@@ -450,12 +536,7 @@ class MCPBridgeServer:
             {
                 "name": "analyze_workspace",
                 "description": "取得 Dynamo 工作區中所有節點的當前狀態。",
-                "inputSchema": {
-                    "type": "object", 
-                    "properties": {
-                        "sessionId": {"type": "string", "description": "選用。指定 Session ID"}
-                    }
-                },
+                "inputSchema": {"type": "object", "properties": {}},
                 "readOnlyHint": True
             },
             {
@@ -487,32 +568,9 @@ class MCPBridgeServer:
             },
             {
                 "name": "get_mcp_guidelines",
-                "description": "取得 GEMINI.md 與快速參考內容。",
+                "description": "取得規範內容。",
                 "inputSchema": {"type": "object", "properties": {}},
                 "readOnlyHint": True
-            },
-            {
-                "name": "get_mcp_tech_guide",
-                "description": "取得 MCP Tools 技術指南 (domain/mcp_tools.md)，包含 Python 節點自動化等多項技術規範。",
-                "inputSchema": {"type": "object", "properties": {}},
-                "readOnlyHint": True
-            },
-            {
-                "name": "create_python_node",
-                "description": "建立一個 Python Script 節點。支援代碼注入與動態輸入埠數量調整。",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "code": {"type": "string", "description": "Python 程式碼"},
-                        "inputCount": {"type": "integer", "description": "輸入埠數量 (IN[0]...IN[N-1])", "default": 1},
-                        "nodeId": {"type": "string", "description": "選用。節點的唯一識別碼"},
-                        "x": {"type": "number", "description": "X 座標", "default": 0},
-                        "y": {"type": "number", "description": "Y 座標", "default": 0},
-                        "sessionId": {"type": "string", "description": "選用。指定會話 ID"}
-                    },
-                    "required": ["code"]
-                },
-                "destructiveHint": True
             },
             {
                 "name": "get_script_library",
@@ -522,7 +580,7 @@ class MCPBridgeServer:
             },
             {
                 "name": "run_autotest",
-                "description": "執行專案自動化測試 (test_roadmap_features.py)。驗證 Dynamo 節點放置、Python 注入、外掛支援與幾幾何運算功能。",
+                "description": "執行專案自動化測試 (test_roadmap_features.py)。驗證 Dynamo 節點放置、Python 注入、外掛支援與幾何運算功能。",
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -540,6 +598,75 @@ class MCPBridgeServer:
                 "description": "取得 Bridge Server 的運行數據與效能統計。",
                 "inputSchema": {"type": "object", "properties": {}},
                 "readOnlyHint": True
+            },
+            {
+                "name": "create_group",
+                "description": "將節點群組化 (Group Nodes)。能夠為指定的節點創建一個帶標題和描述的群組。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "nodeIds": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "要分組的節點 ID 清單"
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "群組標題",
+                            "default": "New Group"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "群組描述",
+                            "default": ""
+                        },
+                        "color": {
+                            "type": "string",
+                            "description": "群組顏色 (Hex)",
+                            "default": "#FFC1D5E0"
+                        }
+                    },
+                    "required": ["nodeIds"]
+                },
+                "destructiveHint": True
+            },
+            {
+                "name": "auto_group",
+                "description": "智慧自動分組 (Auto Group)。自動分析工作區節點，依功能分成輸入/運算/輸出三組並建立色彩群組。支援自訂顏色、描述文字與分組方式。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["auto", "custom"],
+                            "description": "分組模式：auto=自動依節點類型分類（預設）；custom=手動指定各群組節點",
+                            "default": "auto"
+                        },
+                        "input_title": {"type": "string", "description": "輸入群組標題", "default": "輸入參數"},
+                        "input_desc": {"type": "string", "description": "輸入群組說明文字", "default": "使用者可調整的輸入參數，控制腳本行為"},
+                        "input_color": {"type": "string", "description": "輸入群組顏色 (Hex ARGB)", "default": "#FFE91E8A"},
+                        "compute_title": {"type": "string", "description": "運算群組標題", "default": "核心運算"},
+                        "compute_desc": {"type": "string", "description": "運算群組說明文字", "default": "資料處理與幾何運算邏輯"},
+                        "compute_color": {"type": "string", "description": "運算群組顏色 (Hex ARGB)", "default": "#FF4169E1"},
+                        "output_title": {"type": "string", "description": "輸出群組標題", "default": "結果輸出"},
+                        "output_desc": {"type": "string", "description": "輸出群組說明文字", "default": "觀察與驗證運算結果"},
+                        "output_color": {"type": "string", "description": "輸出群組顏色 (Hex ARGB)", "default": "#FF228B22"},
+                        "groups": {
+                            "type": "array",
+                            "description": "[custom 模式] 自訂群組清單",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "description": {"type": "string"},
+                                    "color": {"type": "string"},
+                                    "nodeIds": {"type": "array", "items": {"type": "string"}}
+                                }
+                            }
+                        }
+                    }
+                },
+                "destructiveHint": True
             },
             # === 通用工具橋接層 (Universal Tool Bridge) ===
             {
@@ -580,6 +707,28 @@ class MCPBridgeServer:
                 },
                 "readOnlyHint": True
             },
+            # === Memory Bank 快取管理 ===
+            {
+                "name": "get_memory_bank_summary",
+                "description": "取得 Memory Bank 快取摘要（系統模式、已知坑、近期決策、教訓庫）。**建議每次新對話開始時先呼叫**，避免重複踩坑。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "section": {
+                            "type": "string",
+                            "enum": ["all", "activeContext", "lessons", "systemPatterns", "progress"],
+                            "description": "選用。指定要取得的區段：all=完整摘要（預設）, activeContext=當前狀態, lessons=教訓庫, systemPatterns=系統模式, progress=進度追蹤"
+                        }
+                    }
+                },
+                "readOnlyHint": True
+            },
+            {
+                "name": "reload_memory_bank",
+                "description": "手動重新載入 Memory Bank（當 memory-bank/ 資料夾內容有更新時使用）。",
+                "inputSchema": {"type": "object", "properties": {}},
+                "readOnlyHint": True
+            },
         ]
         return tools
 
@@ -591,12 +740,10 @@ class MCPBridgeServer:
         try:
             if name == "execute_dynamo_instructions":
                 return await execute_dynamo_instructions(**args)
-            elif name == "create_python_node":
-                return await create_python_node_tool(**args)
             elif name == "search_nodes":
                 return await search_nodes_async(**args)
             elif name == "analyze_workspace":
-                return await analyze_workspace(**args)
+                return await analyze_workspace()
             elif name == "get_graph_status":
                 _, res = await _check_dynamo_connection()
                 return res
@@ -604,8 +751,6 @@ class MCPBridgeServer:
                 return await clear_workspace()
             elif name == "get_mcp_guidelines":
                 return get_mcp_guidelines()
-            elif name == "get_mcp_tech_guide":
-                return get_mcp_tech_guide()
             elif name == "get_script_library":
                 return get_script_library()
             elif name == "run_autotest":
@@ -618,6 +763,14 @@ class MCPBridgeServer:
                 return await read_dynamo_resource(**args)
             elif name == "get_workspace_version":
                 return await get_workspace_version(**args)
+            elif name == "get_memory_bank_summary":
+                return get_memory_bank_summary(**args)
+            elif name == "reload_memory_bank":
+                return reload_memory_bank()
+            elif name == "create_group":
+                return await create_group(**args)
+            elif name == "auto_group":
+                return await auto_group(**args)
             else:
                 return {"error": f"Tool not found: {name}"}
         except Exception as e:
@@ -758,82 +911,41 @@ def _expand_native_nodes(instruction: dict) -> dict:
         params = node.get("params", {})
         node_id = node.get("id", str(uuid.uuid4()))
         
-        # 只要在 metadata 中，就嘗試進行 Overload 解析，無論是否有 params
-        if name in metadata:
+        # 只有在 metadata 中且有 params 時才擴展
+        if name in metadata and params:
             node_info = metadata[name]
             input_ports = node_info.get("inputs", [])
             
-            # --- Overload Resolution Start ---
-            # 優先順序：1. 明確指定 overload  2. 自動推斷 (params 數量比對)
-            if "overloads" in node_info:
-                explicit_overload = node.get("overload")  # e.g. "3D", "2D"
-                best_match = None
-                
-                # 方式 1：明確指定
-                if explicit_overload:
-                    for overload in node_info["overloads"]:
-                        if overload.get("id") == explicit_overload:
-                            best_match = overload["fullName"]
-                            break
-                            
-                # 方式 2：自動推斷 (根據 params 數量推斷 inputs)
-                # 只有當我們有 params 時才能使用此方式
-                if not best_match and params:
-                    # 計算本次使用的參數集合
-                    current_inputs = set()
-                    for port_name in input_ports:
-                        if port_name in params:
-                            current_inputs.add(port_name)
+            # 為每個參數創建 Number 節點
+            for i, port_name in enumerate(input_ports):
+                if port_name in params:
+                    param_id = f"{node_id}_{port_name}_{timestamp}"
+                    param_node = {
+                        "id": param_id,
+                        "name": "Number",
+                        "value": str(params[port_name]),
+                        "x": float(node.get("x", 0)) - 250,
+                        "y": float(node.get("y", 0)) + (i * 80),
+                        "preview": node.get("preview", True)
+                    }
+                    expanded_nodes.append(param_node)
                     
-                    for overload in node_info["overloads"]:
-                        ov_inputs = set(overload.get("inputs", []))
-                        if ov_inputs == current_inputs:
-                            best_match = overload["fullName"]
-                            break
-                
-                if best_match:
-                    node["creationName"] = best_match
-            # --- Overload Resolution End ---
-
-            # --- Params Expansion Start ---
-            if params:
-                # 為每個參數創建 Number 節點
-                for i, port_name in enumerate(input_ports):
-                    if port_name in params:
-                        param_id = f"{node_id}_{port_name}_{timestamp}"
-                        param_node = {
-                            "id": param_id,
-                            "name": "Number",
-                            "value": str(params[port_name]),
-                            "x": float(node.get("x", 0)) - 250,
-                            "y": float(node.get("y", 0)) + (i * 80),
-                            "preview": node.get("preview", True)
-                        }
-                        expanded_nodes.append(param_node)
-                        
-                        # 建立連線
-                        expanded_connectors.append({
-                            "from": param_id,
-                            "to": node_id,
-                            "fromPort": 0,
-                            "toPort": i,
-                            "toPortName": port_name
-                        })
-                
-                # [Fix] 確保 ID 同步
-                node["id"] = node_id
-                # 清除原 node 的 params
-                clean_node = {k: v for k, v in node.items() if k != "params"}
-                expanded_nodes.append(clean_node)
-            else:
-                # 無 params 但有 metadata，直接加入 (creationName 已更新)
-                expanded_nodes.append(node)
-                
+                    # 建立連線 (同時包含索引與名稱，提供 Fallback 能力)
+                    expanded_connectors.append({
+                        "from": param_id,
+                        "to": node_id,
+                        "fromPort": 0,
+                        "toPort": i,
+                        "toPortName": port_name
+                    })
+            
+            # 清除原 node 的 params 避免重複處理
+            clean_node = {k: v for k, v in node.items() if k != "params"}
+            expanded_nodes.append(clean_node)
         else:
-            # 不在 metadata 中，原樣加入
             expanded_nodes.append(node)
             
-    return {"nodes": expanded_nodes, "connectors": expanded_connectors, "expanded_by_mcp": True}
+    return {"nodes": expanded_nodes, "connectors": expanded_connectors}
 
 def _detect_potential_issues(nodes: list, connectors: list) -> list:
     """偵測潛在問題 (Human-in-the-Loop)"""
@@ -867,14 +979,10 @@ def _generate_dry_run_report(json_data: dict, base_x: float, base_y: float) -> d
     3. 潛在風險警告
     4. 預估畫布佔用範圍
     """
-    # 避免重複展開
-    if "expanded_by_mcp" in json_data:
-        nodes = json_data.get("nodes", [])
-        connectors = json_data.get("connectors", [])
-    else:
-        expanded = _expand_native_nodes(json_data)
-        nodes = expanded.get("nodes", [])
-        connectors = expanded.get("connectors", [])
+    expanded = _expand_native_nodes(json_data)
+    
+    nodes = expanded.get("nodes", [])
+    connectors = expanded.get("connectors", [])
     
     # 套用座標偏移
     for node in nodes:
@@ -938,13 +1046,7 @@ async def execute_dynamo_instructions(
     if isinstance(json_data, list):
         json_data = {"nodes": json_data, "connectors": []}
     
-    # [Fix] 核心修復：強制執行原生節點展開與過載修正
-    # 這是之前導致 params 失效與 Overload 錯誤的主因
-    json_data = _expand_native_nodes(json_data)
-
     if dryRun:
-        # Dry Run 這裡會再次展開，但沒關係，或者我們可以優化 _generate_dry_run_report
-        # 為求穩，直接回傳即可，因為 dry run report 內部也會做檢查
         report = _generate_dry_run_report(json_data, base_x, base_y)
         return json.dumps(report, ensure_ascii=False, indent=2)
     
@@ -967,7 +1069,7 @@ async def execute_dynamo_instructions(
     new_version = version_result["newVersion"]
     
     try:
-        # === 階段 1: 節點創建與更新 (Upsert 邏輯基礎) ===
+        # 座標偏移與策略標註
         if "nodes" in json_data:
             for node in json_data["nodes"]:
                 route_node_creation(node)
@@ -977,50 +1079,56 @@ async def execute_dynamo_instructions(
         if clear_before_execute: 
             await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
         
-        # 僅提取節點指令進行第一波執行
-        node_only_data = {
-            "nodes": json_data.get("nodes", []),
-            "connectors": [] 
-        }
+        # 首次嘗試執行
+        response = await ws_manager.send_command_async(session_id, json_data)
         
-        node_response = await ws_manager.send_command_async(session_id, node_only_data)
-        
-        # [核心優化] 階段間隙：等待 Dynamo 實體化節點 (特別是動態 Port 的 Code Block)
-        await asyncio.sleep(0.3) 
-        
-        # === 階段 2: 建立連線 ===
-        if node_response.get("status") == "ok":
-            # 建立連線指令集
-            connector_data = {
-                "nodes": [],
-                "connectors": json_data.get("connectors", [])
+        # [核心優化] 差異化重試與降級機制 (Differentiated Fallback)
+        if response.get("status") == "error" and allow_fallback:
+            log(f"[Fallback] 軌道 B 執行失敗，嘗試降級至軌道 A (Code Block)... 錯誤: {response.get('message')}")
+            
+            # [修正] 根據使用者要求，禁止自動清空工作區 (User Rule: 不允許自動清空工作區)
+            # log("[Fallback] 清除失敗節點...")
+            # await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
+            
+            fallback_nodes = []
+            for node in json_data.get("nodes", []):
+                # 僅針對原生幾何節點進行轉換
+                if node.get("name") in _load_common_nodes_metadata():
+                    code = _generate_ds_code(node)
+                    fallback_node = {
+                        "id": node.get("id"),
+                        "name": "Number",
+                        "value": code,
+                        "x": node.get("x"),
+                        "y": node.get("y"),
+                        "preview": node.get("preview", True)
+                    }
+                    fallback_nodes.append(fallback_node)
+                else:
+                    # 非原生節點保留（例如 Python Script 保持不變，或已轉換的 Number 節點）
+                    fallback_nodes.append(node)
+            
+            # 建立降級後的指令集（通常 Code Block 模式不依賴 connectors，因為邏輯已內嵌）
+            # 但如果是手動指定的連線仍需保留
+            fallback_data = {
+                "nodes": fallback_nodes,
+                "connectors": json_data.get("connectors", []) if not any(n.get("name") in _load_common_nodes_metadata() for n in json_data.get("nodes", [])) else []
             }
             
-            # 輔助：更新 Lacing (如果節點指令中包含 lacing)
-            lacing_update = [{"id": n["id"], "lacing": n["lacing"]} for n in json_data.get("nodes", []) if "lacing" in n]
-            if lacing_update:
-                await ws_manager.send_command_async(session_id, {"nodes": lacing_update, "connectors": []})
-
-            if connector_data["connectors"]:
-                response = await ws_manager.send_command_async(session_id, connector_data)
+            retry_response = await ws_manager.send_command_async(session_id, fallback_data)
+            if retry_response.get("status") == "ok":
+                return json.dumps({
+                    "status": "ok",
+                    "message": "成功 (已透過軌道 A 降級重試恢復)",
+                    "version": new_version,
+                    "clientId": clientId
+                }, ensure_ascii=False)
             else:
-                response = node_response
-        else:
-            response = node_response
-        
-        # [安全性優化] 移除自動清空與降級機制 (不再執行 clear_graph)
-        if response.get("status") == "error":
-             log(f"[WARNING] 指令執行失敗，保留手動成果。錯誤: {response.get('message')}")
-             error_details = response.get('errors', [])
-             detailed_msg = f"執行失敗，保留工作區現狀: {response.get('message')}"
-             if error_details:
-                 detailed_msg += f" | 詳細錯誤: {json.dumps(error_details, ensure_ascii=False)}"
-                 
-             return json.dumps({
-                 "status": "error", 
-                 "message": detailed_msg,
-                 "version": new_version
-             }, ensure_ascii=False)
+                return json.dumps({
+                    "status": "error",
+                    "message": f"失敗 (重試後仍錯誤): {retry_response.get('message')}",
+                    "version": new_version
+                }, ensure_ascii=False)
         
         if response.get("status") == "ok":
             return json.dumps({
@@ -1066,29 +1174,23 @@ async def search_nodes_async(query: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-async def analyze_workspace(sessionId: str = None) -> str:
-    # [優化] 僅在存在多個會話時執行清理，減少單會話場景的延遲
-    with ws_manager._lock:
-        session_count = len(ws_manager.active_sessions)
-    if session_count > 1:
-        await ws_manager.cleanup_stale_sessions()
+async def analyze_workspace() -> str:
+    # 每次分析前清理過期會話
+    await ws_manager.cleanup_stale_sessions()
     
     with ws_manager._lock:
         sessions = list(ws_manager.active_sessions.keys())
+        session_count = len(sessions)
         session_info = dict(ws_manager.session_info)
     
-    target_id = sessionId if sessionId and sessionId in sessions else (sessions[-1] if sessions else None)
-    if not target_id:
-        return "[FAIL] 失敗: 目前沒有活動中的 Dynamo 連線。"
-
-    is_ok, res = await _check_dynamo_connection(target_id)
+    is_ok, res = await _check_dynamo_connection()
     if not is_ok:
         return f"[FAIL] 失敗: {res}"
     
-    # 注入會話管理資訊
-    if len(sessions) > 1:
+    # [核心優化] 幽靈連線偵測與詳細狀態
+    if session_count > 1:
         data = json.loads(res)
-        data["warning"] = f"[WARNING] 偵測到 {len(sessions)} 個會話。目前分析對象: {target_id}"
+        data["warning"] = f"[WARNING] 警告: 偵測到 {session_count} 個活動中的會話。指令目前預設發送至最後一個連線 (Session: {sessions[-1]})。若不正確，請使用 list_sessions 查看並指定 sessionId。"
         data["all_sessions"] = [
             {"id": sid, "fileName": info["fileName"], "connected": time.strftime('%H:%M:%S', time.localtime(info['connectedAt']))}
             for sid, info in session_info.items()
@@ -1140,37 +1242,7 @@ async def clear_workspace() -> str:
 
 def get_mcp_guidelines() -> str:
     g, q = _load_guidelines()
-    return f"# GUIDELINES\n\n{g}\n\n# QUICK REF\n\n{q}"
-
-def get_mcp_tech_guide() -> str:
-    """讀取 MCP Tools 技術指南"""
-    try:
-        path = os.path.join(PROJECT_ROOT, "domain", "mcp_tools.md")
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                return f.read()
-        return "Tech guide not found."
-    except Exception as e:
-        return f"Error reading tech guide: {str(e)}"
-
-async def create_python_node_tool(code: str, inputCount: int = 1, nodeId: str = None, x: float = 0, y: float = 0, sessionId: str = None) -> dict:
-    """專用工具：建立 Python 節點"""
-    import uuid
-    actual_id = nodeId if nodeId else f"python_{uuid.uuid4().hex[:8]}"
-    
-    instruction = {
-        "nodes": [{
-            "id": actual_id,
-            "name": "Python Script",
-            "pythonCode": code,
-            "inputCount": inputCount,
-            "x": x,
-            "y": y
-        }],
-        "connectors": []
-    }
-    
-    return await execute_dynamo_instructions(json.dumps(instruction), sessionId=sessionId)
+    return f"# GUIDELINES\\n\\n{g}\\n\\n# QUICK REF\\n\\n{q}"
 
 def get_script_library() -> str:
     scripts = []
@@ -1195,7 +1267,7 @@ async def run_autotest_async() -> dict:
     current_dir = Path(__file__).parent.resolve()
     # server.py 在 bridge/python/server.py，專案根目錄在 ../../
     project_root = current_dir.parent.parent
-    script_path = project_root / "tests" / "test_roadmap_features.py"
+    script_path = project_root / "tools" / "autotest.py"
     
     if not script_path.exists():
         return {"error": f"Test script not found at {script_path}"}
@@ -1228,6 +1300,239 @@ async def run_autotest_async() -> dict:
     except Exception as e:
         return {"error": f"Failed to run autotest: {str(e)}"}
 
+def get_memory_bank_summary(section: str = "all") -> str:
+    """
+    取得 Memory Bank 快取摘要
+    Args:
+        section: 指定區段 (all, activeContext, lessons, systemPatterns, progress)
+    Returns:
+        格式化的摘要內容
+    """
+    if MEMORY_BANK_SUMMARY is None:
+        return json.dumps({"error": "Memory Bank 尚未載入。請重啟 Server 或呼叫 reload_memory_bank。"}, ensure_ascii=False)
+    
+    if MEMORY_BANK_SUMMARY.get("status") == "error":
+        return json.dumps(MEMORY_BANK_SUMMARY, ensure_ascii=False)
+    
+    try:
+        if section == "activeContext":
+            content = MEMORY_BANK_SUMMARY.get("activeContext", "(無內容)")
+            return f"# 當前工作焦點\n\n{content}"
+        
+        elif section == "lessons":
+            lessons = MEMORY_BANK_SUMMARY.get("lessons", [])
+            if not lessons:
+                return "# 教訓庫\n\n(無已記錄教訓)"
+            
+            lines = ["# 教訓庫摘要\n"]
+            for i, lesson in enumerate(lessons, 1):
+                lines.append(f"## {i}. {lesson['title']} ({lesson['file']})")
+                lines.append(f"{lesson['summary'][:300]}...\n")
+            return "\n".join(lines)
+        
+        elif section == "systemPatterns":
+            content = MEMORY_BANK_SUMMARY.get("systemPatterns", "(無內容)")
+            return f"# 系統架構與設計模式\n\n{content[:1500]}...\n\n(完整內容請參考 memory-bank/systemPatterns.md)"
+        
+        elif section == "progress":
+            content = MEMORY_BANK_SUMMARY.get("progress", "(無內容)")
+            return f"# 專案進度追蹤\n\n{content[:1000]}...\n\n(完整內容請參考 memory-bank/progress.md)"
+        
+        else:  # section == "all"
+            lessons = MEMORY_BANK_SUMMARY.get("lessons", [])
+            active = MEMORY_BANK_SUMMARY.get("activeContext", "")
+            
+            summary_text = f"""# Memory Bank 摘要
+> 載入時間：{MEMORY_BANK_LOAD_TIME}
+> 教訓數量：{len(lessons)}
+
+## 📍 當前工作焦點
+{active[:800]}...
+
+## 🧠 系統模式 (SSOT)
+{MEMORY_BANK_SUMMARY.get('systemPatterns', '')[:600]}...
+
+## 📊 專案進度
+{MEMORY_BANK_SUMMARY.get('progress', '')[:500]}...
+
+## 📚 核心教訓（前 5 條）
+"""
+            
+            for i, lesson in enumerate(lessons[:5], 1):
+                summary_text += f"\n### {i}. {lesson['title']}\n{lesson['summary'][:200]}...\n"
+            
+            if len(lessons) > 5:
+                summary_text += f"\n... 還有 {len(lessons) - 5} 條教訓，使用 section='lessons' 查看完整列表\n"
+            
+            summary_text += "\n\n---\n**使用建議**: 每次新對話開始時呼叫此工具，避免重複踩坑。\n"
+            
+            return summary_text
+    
+    except Exception as e:
+        return json.dumps({"error": f"Failed to format summary: {e}"}, ensure_ascii=False)
+
+def reload_memory_bank() -> str:
+    """
+    手動重新載入 Memory Bank
+    Returns:
+        載入狀態
+    """
+    result = load_memory_bank()
+    
+    if result.get("status") == "ok":
+        return json.dumps({
+            "status": "ok",
+            "message": "✅ Memory Bank 已重新載入",
+            "loadTime": result["loadTime"],
+            "lessonsCount": result["lessonsCount"]
+        }, ensure_ascii=False, indent=2)
+    else:
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+async def create_group(nodeIds: List[str], title: str = "New Group", description: str = "", color: str = "#FFC1D5E0") -> dict:
+    """
+    建立節點群組
+    """
+    with ws_manager._lock:
+        sessions = list(ws_manager.active_sessions.keys())
+    
+    if not sessions:
+        return {"error": "No active Dynamo connections"}
+    
+    session_id = sessions[-1]
+    
+    cmd = {
+        "action": "create_group",
+        "nodeIds": nodeIds,
+        "title": title,
+        "description": description,
+        "color": color
+    }
+    
+    try:
+        result = await ws_manager.send_command_async(session_id, cmd)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# 輸入節點的 fullName 前綴清單
+_INPUT_PREFIXES = (
+    "CoreNodeModels.Input.",      # Number, Slider, String, Bool, File...
+    "DSCore.Input.",
+)
+# 輸出節點的 name 清單
+_OUTPUT_NAMES = {"Watch", "Watch 3D", "Python Script"}
+_OUTPUT_FULL = ("CoreNodeModels.Watch",)
+
+
+async def auto_group(
+    mode: str = "auto",
+    input_title: str = "輸入參數",
+    input_desc: str = "使用者可調整的輸入參數，控制腳本行為",
+    input_color: str = "#FFE91E8A",
+    compute_title: str = "核心運算",
+    compute_desc: str = "資料處理與幾何運算邏輯",
+    compute_color: str = "#FF4169E1",
+    output_title: str = "結果輸出",
+    output_desc: str = "觀察與驗證運算結果",
+    output_color: str = "#FF228B22",
+    groups: list = None
+) -> dict:
+    """
+    智慧分組工具：自動分析工作區並建立輸入/運算/輸出三組
+    """
+    with ws_manager._lock:
+        sessions = list(ws_manager.active_sessions.keys())
+
+    if not sessions:
+        return {"error": "No active Dynamo connections"}
+
+    session_id = sessions[-1]
+
+    # === custom 模式：直接使用使用者提供的分組清單 ===
+    if mode == "custom" and groups:
+        results = []
+        for g in groups:
+            r = await create_group(
+                nodeIds=g.get("nodeIds", []),
+                title=g.get("title", "Group"),
+                description=g.get("description", ""),
+                color=g.get("color", "#FFC1D5E0")
+            )
+            results.append({"title": g.get("title"), "result": r})
+        created = sum(1 for r in results if r["result"].get("status") == "ok")
+        return {"status": "ok", "groups_created": created, "details": results}
+
+    # === auto 模式：分析工作區並分類節點 ===
+    try:
+        raw = await analyze_workspace()
+    except Exception as e:
+        return {"error": f"Failed to analyze workspace: {e}"}
+
+    if isinstance(raw, str):
+        if raw.startswith("[FAIL]"):
+            return {"error": raw}
+        ws_data = json.loads(raw)
+    else:
+        ws_data = raw
+
+    nodes = ws_data.get("nodes", [])
+    if not nodes:
+        return {"error": "No nodes found in workspace"}
+
+
+    input_ids, compute_ids, output_ids = [], [], []
+
+    for node in nodes:
+        nid = node.get("id", "")
+        full_name = node.get("fullName", "")
+        name = node.get("name", "")
+
+        # 判斷輸出節點
+        is_output = (
+            any(full_name.startswith(p) for p in _OUTPUT_FULL)
+            or name in _OUTPUT_NAMES
+        )
+        # 判斷輸入節點
+        is_input = any(full_name.startswith(p) for p in _INPUT_PREFIXES)
+
+        if is_output:
+            output_ids.append(nid)
+        elif is_input:
+            input_ids.append(nid)
+        else:
+            compute_ids.append(nid)
+
+    log(f"[auto_group] Input={len(input_ids)}, Compute={len(compute_ids)}, Output={len(output_ids)}")
+
+    results = []
+    group_defs = [
+        (input_ids,   input_title,   input_desc,   input_color),
+        (compute_ids, compute_title, compute_desc, compute_color),
+        (output_ids,  output_title,  output_desc,  output_color),
+    ]
+
+    for node_ids, title, desc, color in group_defs:
+        if not node_ids:
+            results.append({"title": title, "result": {"status": "skipped", "reason": "no nodes"}})
+            continue
+        r = await create_group(nodeIds=node_ids, title=title, description=desc, color=color)
+        results.append({"title": title, "node_count": len(node_ids), "result": r})
+
+    created = sum(1 for r in results if r["result"].get("status") == "ok")
+    return {
+        "status": "ok",
+        "mode": "auto",
+        "groups_created": created,
+        "breakdown": {
+            "input": len(input_ids),
+            "compute": len(compute_ids),
+            "output": len(output_ids)
+        },
+        "details": results
+    }
+
 # ==========================================
 # 入口點
 # ==========================================
@@ -1245,6 +1550,9 @@ if __name__ == "__main__":
     bridge_server = MCPBridgeServer(port=bridge_port)
     
     async def main():
+        # 啟動時載入 Memory Bank
+        load_memory_bank()
+        
         # 同時啟動兩個非同步服務，共用同一個 Event Loop
         await asyncio.gather(
             ws_manager.run("127.0.0.1", dynamo_port),

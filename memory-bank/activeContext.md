@@ -1,32 +1,30 @@
 # 當前工作焦點
 
-> **最後更新**: 2026-02-13
+> **最後更新**: 2026-02-22
 
 ## 📍 當前狀態
-- **版本**: v3.3 (System Stability Verified)
-- **主要工作**: 系統穩定性驗證 (Stability Testing) - **[完成]** 全面功能驗證 (Core/Plugin/Auto-Start)
+- **版本**: v3.4 (Enhanced Analysis & Stability)
+- **主要工作**: **v3.5 節點分組與穩定性優化** - 正在驗證 `create_group` 在不同場景下的穩定性，並計劃建立外掛 GUID 映射表以提升開發效率。
 
 ## 🎯 近期決策
 
 | 日期 | 決策 | 結果 |
 |:---|:---|:---|
-| 2026-02-13 | 採用 GUID 建立外掛節點 | 解決 Clockwork 等 Custom Node 名稱解析失敗問題 (BUG-003) |
-| 2026-02-13 | 增強工作區分析 (Trojan Horse) | `analyze_workspace` 現可回傳 fullName/creationName，賦予 Agent 自診斷能力 |
-| 2026-02-13 | 簡化節點建立邏輯 | `CreateNode` 回歸直接信任輸入名稱 (或 GUID)，移除不穩定的深度搜尋 |
-| 2026-02-13 | 驗證 Server 自動啟動 | 確認 Node.js Bridge 可自動喚醒 Server，達成 Zero-touch 體驗 |
+| 2026-02-19 | 修復連線逾時 Bug | 將 `cleanup_stale_sessions` 預設值由 30s 提高至 300s，避免分析大型圖表時斷線 |
+| 2026-02-19 | 實作 /image 視覺化分析 | 成功解析大型圖表，並產出 Mermaid 關係圖與技術文檔 |
+| 2026-02-22 | 倉儲結構重組 | 將分散的腳本與日誌歸位至 `tools/` 與 `logs/`，並清理根目錄 |
+| 2026-02-22 | 更新 Memory Bank | 同步專案狀態至 v3.4，並準備邁向 v3.5 |
 
 ## 🔄 進行中任務
-- [x] 執行 MCP 穩定性測試計畫 (Phase 1-4)
-- [x] 驗證 Server 自動啟動與知識庫存取
-- [x] 修復 Clockwork Passthrough 建立失敗問題 (使用 GUID: `ecce77dc...`)
-- [x] 更新 `final_report.md` 總結測試結果
-- [ ] Zaha Facade: 重啟生成任務 (Phase 4/5)
-- [ ] 考慮將 Clockwork GUIDs 建立為映射表 (Mapping Table)
+- [x] 倉儲結構清理 (Moving files to `tools/`, `logs/`, `trials/`)
+- [x] 更新 `README.md` 與 `README_EN.md` 至 v3.4
+- [ ] 驗證 `create_group` 功能穩定性
+- [ ] 建立 Clockwork GUIDs 建立為映射表 (Mapping Table)
 
 ## ⚠️ 待解決問題
 - **BUG-003**: Custom Node (外掛節點) 無法透過名稱字串搜尋/建立。
-  - **Workaround**: 使用 `analyze_workspace` 取得 GUID，並以此 GUID 建立節點。
+  - **Workaround**: 已成功使用 GUID 建立。長期目標是建立 Mapping Table。
 
 ## 📝 備註
-- 系統核心功能 (Native/Python/Overload) 穩定。
+- 系統核心功能穩定，分析能力強化後可處理超過 100 個節點的複雜圖表。
 - 建議在未來專案中優先使用原生節點，若必須使用外掛，請先取得其 GUID。

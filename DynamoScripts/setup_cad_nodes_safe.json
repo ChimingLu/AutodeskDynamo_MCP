@@ -1,0 +1,39 @@
+{
+    "nodes": [
+        {
+            "id": "cb_layer_safe",
+            "name": "Code Block",
+            "value": "\"0\";",
+            "x": 100,
+            "y": 400
+        },
+        {
+            "id": "cb_bool_safe",
+            "name": "Code Block",
+            "value": "true;",
+            "x": 100,
+            "y": 550
+        },
+        {
+            "id": "watch_safe",
+            "name": "Watch",
+            "x": 800,
+            "y": 250
+        },
+        {
+            "id": "cb_instr1",
+            "name": "Code Block",
+            "value": "\"// 1. Place 'Select Model Element' node\n// and connect to 'ImportInstance'\";",
+            "x": 100,
+            "y": 100
+        },
+        {
+            "id": "cb_instr2",
+            "name": "Code Block",
+            "value": "\"// 2. Place 'CurvesFromCADLayers' node here\n// Connect Layer (0) -> Input 1\n// Connect True -> Input 2\";",
+            "x": 450,
+            "y": 250
+        }
+    ],
+    "connectors": []
+}

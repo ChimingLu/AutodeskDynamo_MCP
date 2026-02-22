@@ -9,25 +9,13 @@ With this system, AI can directly control Dynamo for BIM automation operations, 
 
 ---
 
-## 🚀 Latest Version v3.2: Memory Bank & SOP Standardization
+## 🚀 Latest Version v3.4: Enhanced Analysis & Visualization
+The project has been upgraded to **v3.4**, introducing powerful script analysis tools and node management features:
 
-The project has been upgraded to **v3.2**, introducing the **Memory Bank** architecture and comprehensive **Standard Operating Procedures (SOPs)**, with significant improvements in system stability:
-
-1.  **Memory Bank (`memory-bank/`)**: Structured AI knowledge base including project progress, tech stack, and core lessons, ensuring context continuity for AI collaboration.
-2.  **SOP Knowledge Base (`domain/`)**: Transforming operational commands into Standard Operating Procedures to improve AI execution accuracy.
-3.  **MCP Server Stability**: Fixed asyncio event loop conflicts and WebSocket ghost connection issues.
-4.  **Autotest Integration**: Added `run_autotest` tool for automated functional verification.
-
----
-
-## 🚀 Major Update: Hybrid Stdin+WebSocket Mode (v3.0)
-
-This project was upgraded in v3.0 to a **Hybrid Stdin+WebSocket mechanism** to support Gemini CLI, Claude Desktop, and Antigravity:
-
-1.  **AI Client** (Gemini/Claude) communicates with the Node.js bridge via **Stdio (MCP)**.
-2.  **Node.js Bridge** (`bridge/node/index.js`) forwards requests to the Python manager via **WebSocket**.
-3.  **Python Manager** (`bridge/python/server.py`) manages tool logic and the WebSocket connection to Dynamo.
-4.  **Dynamo Extension** (C#) handles final canvas operations.
+1.  **Visualization Analysis (`/image`)**: Automatically analyze Dynamo scripts and generate Mermaid flowcharts and analysis reports, supporting large complex graphs (100+ nodes).
+2.  **Node Grouping (`create_group`)**: Support for organizing selected nodes into groups to improve graph readability and management efficiency.
+3.  **Stability Optimization**: Fixed WebSocket timeout issues when analyzing large graphs and enhanced the reliability of the auto-startup mechanism.
+4.  **Repository Structure Optimization**: Reorganized the root directory, classifying logs, testing tools, and experimental scripts into dedicated folders to ensure a clean development environment.
 
 ---
 
@@ -51,9 +39,10 @@ graph TD
 - `domain/`: **[SOP Knowledge Base]** Standard Operating Procedures, Slash Command docs, and Troubleshooting.
 - `DynamoScripts/`: Script library for tested Dynamo JSON graph definitions.
 - `DynamoViewExtension/`: C# source code, including `common_nodes.json`.
-- `logs/`: Central repository for server logs and error reports.
+- `tools/`: **[NEW]** Auxiliary tools, deployment scripts, and fix commands.
+- `logs/`: **[NEW]** Central repository for server logs and error reports.
+- `trials/`: **[NEW]** Experimental scripts and transition documents from the development process.
 - `tests/`: Functional verification tools.
-- `examples/`: Reference examples for developers.
 - `image/`: Visualization dashboards produced by `/image`.
 - `deploy.ps1`: **[One-click Deployment]** Build and install the extension to the Dynamo package path.
 - **`mcp_config.json`**: Centralized configuration file.
