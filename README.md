@@ -14,6 +14,7 @@
 本專案已升級至 **v3.4**，引入了強大的腳本分析工具與節點管理功能：
 
 1.  **視覺化分析 (`/image`)**：自動解析 Dynamo 腳本並生成 Mermaid 流程圖與分析報告，支援大型複雜圖表 (100+ 節點)。
+  - **正式工具入口**：`generate_workspace_mermaid`，可直接輸出 Mermaid、邏輯摘要與 Markdown 報告。
 2.  **節點分組 (`create_group`)**：支援將選定節點組織成組，提升圖表可讀性與管理效率。
 3.  **穩定性優化**：修復了大型圖表分析時的 WebSocket 逾時問題，並增強了自動啟動機制的可靠性。
 4.  **倉儲結構優化**：整理根目錄，將日誌、測試工具與實驗腳本分類存放，確保開發環境整潔。
@@ -125,6 +126,7 @@ graph TD
 
 - `execute_dynamo_instructions` - 創建節點與連線
 - `analyze_workspace` - 分析工作區狀態
+- `generate_workspace_mermaid` - 產生工作區 Mermaid 流程圖與 Markdown 邏輯分析
 - `search_nodes` - 搜尋可用節點 (舊名: list_available_nodes)
 - `run_autotest` - 執行自動化測試
 - `get_script_library` - 取得腳本庫清單
@@ -136,6 +138,9 @@ graph TD
 
 Antigravity 用戶可安裝 Skill 以獲得自動觸發功能：
 
+- `.skills/dynamo-automation`：建立/修改/連線 Dynamo 節點
+- `.skills/dynamo-script-analysis`：分析當前腳本邏輯並生成 Mermaid 流程圖
+
 **符號連結方式**（推薦開發者）：
 ```powershell
 New-Item -ItemType SymbolicLink `
@@ -146,6 +151,9 @@ New-Item -ItemType SymbolicLink `
 **手動複製方式**：
 ```powershell
 Copy-Item -Recurse ".skills\dynamo-automation" `
+  "$env:USERPROFILE\.gemini\antigravity\skills\"
+
+Copy-Item -Recurse ".skills\dynamo-script-analysis" `
   "$env:USERPROFILE\.gemini\antigravity\skills\"
 ```
 

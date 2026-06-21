@@ -27,6 +27,20 @@
 
 ---
 
+## 🔄 2026-06 Mermaid Skill 強化（v3.5 里程碑）
+
+| 變更項目 | 說明 | 影響範圍 |
+|:---|:---|:---|
+| `generate_workspace_mermaid` 模式化 | 新增 `mode` 參數：`pipeline` / `semantic` / `detail`，預設 `pipeline` | `bridge/python/server.py` |
+| 預設方向調整 | Mermaid 預設方向改為 `TD`（由上到下） | `bridge/python/server.py`, `tools/generate_mermaid_artifacts.py` |
+| Pipeline 可讀邏輯圖 | 依工作流階段自動合併節點並輸出中文語意標籤（如輸入參數、曲線生成、曲面運算） | `bridge/python/server.py` |
+| 循環邊修正 | 以 stage rank 過濾反向邊，避免圖中出現互相指向導致線段難讀 | `bridge/python/server.py` |
+| Mermaid 工程化腳本 | 新增 `tools/generate_mermaid_artifacts.py`，支援產生/驗證/轉圖（PNG/SVG） | `tools/generate_mermaid_artifacts.py` |
+| Skill/SOP 同步 | `.skills/dynamo-script-analysis` 與 `domain/commands/image.md` 同步到 TD + pipeline + mode 三種模式 | `.skills/dynamo-script-analysis/SKILL.md`, `domain/commands/image.md` |
+| 測試同步 | `verify_generate_workspace_mermaid.py` 改為驗證 `TD + pipeline` 輸出 | `tests/verify_generate_workspace_mermaid.py` |
+
+---
+
 ## ✅ 已完成功能
 
 ### 核心功能
@@ -48,6 +62,8 @@
 - [x] `list_sessions` - 會話列表
 - [x] `create_group` - 節點分組 (Beta)
 - [x] `/image` - 腳本視覺化分析
+- [x] `generate_workspace_mermaid(mode=...)` - 三模式邏輯圖 (`pipeline` / `semantic` / `detail`)
+- [x] `tools/generate_mermaid_artifacts.py` - Mermaid 產生 + 驗證 + 轉圖
 
 ---
 
@@ -55,6 +71,7 @@
 
 - [ ] 外掛 GUID 映射表建置
 - [ ] 節點分組穩定性驗證
+- [ ] README/README_EN 與新版 `mode` 參數範例持續對齊
 
 ---
 

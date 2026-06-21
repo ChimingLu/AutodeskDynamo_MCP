@@ -13,6 +13,7 @@ With this system, AI can directly control Dynamo for BIM automation operations, 
 The project has been upgraded to **v3.4**, introducing powerful script analysis tools and node management features:
 
 1.  **Visualization Analysis (`/image`)**: Automatically analyze Dynamo scripts and generate Mermaid flowcharts and analysis reports, supporting large complex graphs (100+ nodes).
+  - **Formal tool entrypoint**: `generate_workspace_mermaid`, which returns Mermaid, logic summaries, and Markdown reports.
 2.  **Node Grouping (`create_group`)**: Support for organizing selected nodes into groups to improve graph readability and management efficiency.
 3.  **Stability Optimization**: Fixed WebSocket timeout issues when analyzing large graphs and enhanced the reliability of the auto-startup mechanism.
 4.  **Repository Structure Optimization**: Reorganized the root directory, classifying logs, testing tools, and experimental scripts into dedicated folders to ensure a clean development environment.
@@ -124,6 +125,7 @@ This project provides an AI automation interface through **Model Context Protoco
 
 - `execute_dynamo_instructions` - Create nodes and connections
 - `analyze_workspace` - Analyze workspace state
+- `generate_workspace_mermaid` - Generate Mermaid flowcharts and Markdown logic reports for the current workspace
 - `search_nodes` - Search available nodes (formerly `list_available_nodes`)
 - `run_autotest` - Execute automated tests
 - `get_script_library` - Get script library list
@@ -135,6 +137,9 @@ This project provides an AI automation interface through **Model Context Protoco
 
 Antigravity users can install the Skill for automatic triggering:
 
+- `.skills/dynamo-automation`: create/modify/connect Dynamo nodes
+- `.skills/dynamo-script-analysis`: analyze current script logic and generate Mermaid flowcharts
+
 **Symbolic Link Method** (recommended for developers):
 ```powershell
 New-Item -ItemType SymbolicLink `
@@ -145,6 +150,9 @@ New-Item -ItemType SymbolicLink `
 **Manual Copy Method**:
 ```powershell
 Copy-Item -Recurse ".skills\dynamo-automation" `
+  "$env:USERPROFILE\.gemini\antigravity\skills\"
+
+Copy-Item -Recurse ".skills\dynamo-script-analysis" `
   "$env:USERPROFILE\.gemini\antigravity\skills\"
 ```
 
@@ -233,6 +241,7 @@ Get-ChildItem "$env:AppData\Dynamo\Dynamo Revit" -Directory
 | `execute_dynamo_instructions` | Place nodes and connectors on the canvas | Core automated modeling |
 | `clear_workspace` | **[NEW]** One-click workspace clearing | Redesign or redrawing |
 | `analyze_workspace` | Query current node status and errors | Debugging and status checking |
+| `generate_workspace_mermaid` | Convert the current workspace into Mermaid and Markdown analysis | Script review, `/image`, logic explanation |
 | `search_nodes` | Search available Dynamo nodes (including .dyf) | Find modeling tools |
 | `get_script_library` | Get list of available scripts | Modular reuse |
 

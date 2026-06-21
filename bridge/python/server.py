@@ -17,9 +17,11 @@ Dynamo MCP WebSocket Manager
 簡化版 - 只處理 WebSocket 連線（Dynamo 和 Node.js MCP Bridge）
 """
 
-import time, os, json, glob, asyncio, websockets, threading, uuid, subprocess, sys
+import time, os, json, glob, asyncio, websockets, threading, uuid, subprocess, sys, re
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from pathlib import Path
+from collections import Counter
 
 # 全域日誌函數
 def log(m): print(m, file=sys.stderr)
@@ -97,6 +99,7 @@ session_state_manager = SessionStateManager()
 GUIDELINE_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "GEMINI.md"))
 QUICK_REF_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "QUICK_REFERENCE.md"))
 CONFIG_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "mcp_config.json"))
+ADDON_GUID_MAPPING_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "domain", "addon_guid_mapping.json"))
 MEMORY_BANK_PATH = Path(__file__).parent.parent.parent / "memory-bank"
 
 CONFIG = {}
@@ -201,6 +204,7 @@ def load_memory_bank() -> dict:
 # ==========================================
 
 _common_nodes_metadata = None
+_addon_guid_mapping = None
 
 def _load_guidelines() -> tuple[str, str]:
     g_content, q_content = "", ""
@@ -227,6 +231,849 @@ def _load_common_nodes_metadata() -> dict:
     except Exception as e:
         log(f"[WARN] Failed to load node metadata: {e}")
         return {}
+
+def _load_addon_guid_mapping() -> dict:
+    """載入外掛 GUID 映射檔，提供名稱->GUID 的快速查找。"""
+    global _addon_guid_mapping
+    if _addon_guid_mapping is not None:
+        return _addon_guid_mapping
+
+    empty = {"entries": [], "index": {}}
+    if not os.path.exists(ADDON_GUID_MAPPING_PATH):
+        _addon_guid_mapping = empty
+        return _addon_guid_mapping
+
+    try:
+        with open(ADDON_GUID_MAPPING_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        entries = payload.get("entries", []) if isinstance(payload, dict) else []
+        index = {}
+        normalized_entries = []
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            guid = str(entry.get("guid", "")).strip().lower()
+            if not guid:
+                continue
+
+            package = str(entry.get("package", "")).strip()
+            node_display = str(entry.get("nodeDisplay", "")).strip()
+
+            normalized = {
+                "package": package,
+                "nodeDisplay": node_display,
+                "guid": guid,
+                "note": entry.get("note", ""),
+                "source": entry.get("source", "")
+            }
+            normalized_entries.append(normalized)
+
+            # 支援多種查詢鍵：GUID、顯示名稱、Package.Node、Package:Node
+            alias_candidates = {
+                guid,
+                node_display.lower(),
+                f"{package}.{node_display}".lower(),
+                f"{package}:{node_display}".lower(),
+            }
+            for alias in alias_candidates:
+                if alias and alias != ".":
+                    index[alias] = normalized
+
+        _addon_guid_mapping = {"entries": normalized_entries, "index": index, "entryCount": len(normalized_entries)}
+        return _addon_guid_mapping
+    except Exception as e:
+        log(f"[WARN] Failed to load addon guid mapping: {e}")
+        _addon_guid_mapping = {**empty, "entryCount": 0}
+        return _addon_guid_mapping
+
+
+def _load_workspace_snapshot(snapshot_path: str) -> dict:
+    """從離線 JSON 快照載入工作區資料。"""
+    if not snapshot_path:
+        raise ValueError("snapshotPath is required")
+
+    path = Path(snapshot_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Snapshot not found: {snapshot_path}")
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Snapshot JSON must be an object")
+    return raw
+
+
+def _coerce_workspace_payload(raw: dict) -> dict:
+    """正規化即時工作區與離線快照的欄位結構。"""
+    workspace = raw.get("workspace") if isinstance(raw.get("workspace"), dict) else {}
+    nodes = raw.get("nodes", []) if isinstance(raw.get("nodes"), list) else []
+    connectors = raw.get("connectors", []) if isinstance(raw.get("connectors"), list) else []
+
+    workspace_name = (
+        workspace.get("name")
+        or raw.get("workspaceName")
+        or Path(workspace.get("fileName", "")).stem
+        or "Home"
+    )
+    file_name = workspace.get("fileName") or raw.get("fileName") or ""
+
+    return {
+        "sessionId": raw.get("sessionId"),
+        "processId": raw.get("processId"),
+        "workspace": {
+            "name": workspace_name,
+            "fileName": file_name,
+        },
+        "workspaceName": workspace_name,
+        "nodeCount": raw.get("nodeCount", len(nodes)),
+        "connectorCount": raw.get("connectorCount", len(connectors)),
+        "nodes": nodes,
+        "connectors": connectors,
+        "warning": raw.get("warning"),
+        "all_sessions": raw.get("all_sessions", []),
+    }
+
+
+async def _get_workspace_payload(session_id: str = None, snapshot_path: str = None) -> dict:
+    if snapshot_path:
+        return _coerce_workspace_payload(_load_workspace_snapshot(snapshot_path))
+
+    ok, res = await _check_dynamo_connection(session_id=session_id)
+    if not ok:
+        raise RuntimeError(res)
+
+    if isinstance(res, str):
+        return _coerce_workspace_payload(json.loads(res))
+    return _coerce_workspace_payload(res)
+
+
+def _sanitize_mermaid_id(value: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9_]", "_", str(value or "node"))
+    if not token or token[0].isdigit():
+        token = f"n_{token}"
+    return token
+
+
+def _sanitize_mermaid_label(value: str, limit: int = 40) -> str:
+    text = str(value or "(unnamed)").replace('"', "'").replace("\n", " ").strip()
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > limit:
+        text = text[: limit - 3] + "..."
+    return text
+
+
+def _extract_node_type(node: dict) -> str:
+    full_name = str(node.get("fullName") or "")
+    if full_name:
+        return full_name.split(".")[-1]
+    return str(node.get("name") or "Unknown")
+
+
+def _classify_workspace_node(node: dict, indegree: int, outdegree: int) -> str:
+    full_name = str(node.get("fullName") or "")
+    name = str(node.get("name") or "")
+    lowered = f"{name} {full_name}".lower()
+
+    if any(full_name.startswith(prefix) for prefix in _INPUT_PREFIXES):
+        return "input"
+    if any(full_name.startswith(prefix) for prefix in _OUTPUT_FULL) or name in _OUTPUT_NAMES:
+        return "output"
+    if any(keyword in lowered for keyword in ["select", "input", "slider", "boolean", "string", "number"]):
+        return "input"
+    if outdegree == 0:
+        return "output"
+    if indegree == 0:
+        return "input"
+    return "compute"
+
+
+def _workspace_complexity_rating(node_count: int, connector_count: int) -> tuple[str, str]:
+    score = node_count + connector_count
+    if score >= 180:
+        return "高", "⭐⭐⭐⭐⭐"
+    if score >= 100:
+        return "中高", "⭐⭐⭐⭐"
+    if score >= 50:
+        return "中", "⭐⭐⭐"
+    if score >= 20:
+        return "低中", "⭐⭐"
+    return "低", "⭐"
+
+
+def _summarize_workspace_steps(nodes: list, connectors: list, focus_ids: set) -> list:
+    if not nodes:
+        return []
+
+    outgoing = {node.get("id"): [] for node in nodes}
+    incoming = {node.get("id"): [] for node in nodes}
+    for connector in connectors:
+        source = connector.get("from")
+        target = connector.get("to")
+        if source in outgoing:
+            outgoing[source].append(target)
+        if target in incoming:
+            incoming[target].append(source)
+
+    input_nodes = [node for node in nodes if node.get("category") == "input" and node.get("id") in focus_ids]
+    compute_nodes = [node for node in nodes if node.get("category") == "compute" and node.get("id") in focus_ids]
+    output_nodes = [node for node in nodes if node.get("category") == "output" and node.get("id") in focus_ids]
+
+    steps = []
+    if input_nodes:
+        labels = "、".join(_sanitize_mermaid_label(node.get("name"), 18) for node in input_nodes[:4])
+        steps.append(f"收集輸入：由 {labels} 等節點提供參數或模型來源。")
+
+    if compute_nodes:
+        ranked = sorted(
+            compute_nodes,
+            key=lambda node: len(outgoing.get(node.get("id"), [])) + len(incoming.get(node.get("id"), [])),
+            reverse=True,
+        )
+        labels = "、".join(_sanitize_mermaid_label(node.get("name"), 18) for node in ranked[:4])
+        steps.append(f"核心運算：主要透過 {labels} 串接資料轉換與幾何/邏輯處理。")
+
+    if output_nodes:
+        labels = "、".join(_sanitize_mermaid_label(node.get("name"), 18) for node in output_nodes[:4])
+        steps.append(f"輸出結果：最終流向 {labels} 等終端節點供觀察或後續使用。")
+
+    return steps
+
+
+def _select_focus_nodes(nodes: list, connectors: list, max_nodes: int) -> tuple[list, bool]:
+    if len(nodes) <= max_nodes:
+        return nodes, False
+
+    indegree = Counter()
+    outdegree = Counter()
+    for connector in connectors:
+        outdegree[connector.get("from")] += 1
+        indegree[connector.get("to")] += 1
+
+    def priority(node: dict) -> tuple:
+        node_id = node.get("id")
+        name = str(node.get("name") or "")
+        category = node.get("category")
+        degree = indegree[node_id] + outdegree[node_id]
+        special = 1 if name in {"Python Script", "Watch", "Watch 3D"} else 0
+        return (
+            1 if category == "input" else 0,
+            1 if category == "output" else 0,
+            special,
+            degree,
+        )
+
+    selected = sorted(nodes, key=priority, reverse=True)[:max_nodes]
+    selected_ids = {node.get("id") for node in selected}
+    connected = [
+        connector for connector in connectors
+        if connector.get("from") in selected_ids and connector.get("to") in selected_ids
+    ]
+
+    referenced_ids = {connector.get("from") for connector in connected} | {connector.get("to") for connector in connected}
+    pruned = [node for node in selected if node.get("id") in referenced_ids or node.get("category") != "compute"]
+    return pruned[:max_nodes], True
+
+
+def _build_mermaid_flowchart(nodes: list, connectors: list, direction: str) -> str:
+    """原始 1:1 對應版本（供 debug/詳細檢視使用）。"""
+    lines = [f"flowchart {direction}"]
+    category_titles = {
+        "input": "輸入 / Sources",
+        "compute": "核心運算 / Logic",
+        "output": "輸出 / Sinks",
+    }
+
+    nodes_by_category = {"input": [], "compute": [], "output": []}
+    for node in nodes:
+        nodes_by_category.setdefault(node.get("category"), []).append(node)
+
+    for category in ["input", "compute", "output"]:
+        lines.append(f"    subgraph {category}[\"{category_titles[category]}\"]")
+        for node in nodes_by_category.get(category, []):
+            mermaid_id = _sanitize_mermaid_id(node.get("id"))
+            label = _sanitize_mermaid_label(node.get("name") or _extract_node_type(node))
+            lines.append(f"        {mermaid_id}[\"{label}\"]")
+        lines.append("    end")
+
+    for connector in connectors:
+        source = _sanitize_mermaid_id(connector.get("from"))
+        target = _sanitize_mermaid_id(connector.get("to"))
+        lines.append(f"    {source} --> {target}")
+
+    lines.extend([
+        "    classDef input fill:#14324a,stroke:#62b6ff,color:#ffffff;",
+        "    classDef compute fill:#24341f,stroke:#8ed081,color:#ffffff;",
+        "    classDef output fill:#4a2614,stroke:#ffb366,color:#ffffff;",
+    ])
+
+    for category in ["input", "compute", "output"]:
+        ids = [_sanitize_mermaid_id(node.get("id")) for node in nodes_by_category.get(category, [])]
+        if ids:
+            lines.append(f"    class {','.join(ids)} {category};")
+
+    return "\n".join(lines)
+
+
+def _build_semantic_mermaid_flowchart(nodes: list, connectors: list, direction: str) -> str:
+    """語意合併版本：同類型節點合成一格（如 Point.ByCoordinates ×8），
+    同類型間的邊去重，輸出可讀邏輯流程圖。"""
+    category_titles = {
+        "input": "輸入 / Sources",
+        "compute": "核心運算 / Logic",
+        "output": "輸出 / Sinks",
+    }
+
+    # node_id -> group_key (category__typename)
+    node_id_to_group: dict[str, str] = {}
+    groups: dict[str, dict] = {}  # group_key -> {id, label, category, count}
+
+    for node in nodes:
+        # 優先用 node.name（使用者看到的顯示名稱，如 Point.ByCoordinates）
+        # 次選 fullName 的最後一段，最後才用內部 type
+        display_name = str(node.get("name") or "").strip()
+        if not display_name:
+            full_name = str(node.get("fullName") or "")
+            display_name = full_name.split(".")[-1] if full_name else _extract_node_type(node)
+        cat = node.get("category", "compute")
+        safe_key = re.sub(r"[^A-Za-z0-9_]", "_", display_name)
+        group_key = f"{cat}__{safe_key}"
+
+        node_id_to_group[node.get("id", "")] = group_key
+
+        if group_key not in groups:
+            groups[group_key] = {
+                "id": group_key,
+                "label": display_name,
+                "category": cat,
+                "count": 0,
+            }
+        groups[group_key]["count"] += 1
+
+    # 有多個實例時加上數量標記
+    for g in groups.values():
+        if g["count"] > 1:
+            g["label"] = f"{g['label']} \u00d7{g['count']}"
+
+    # 建立去重後的 group 間連線
+    edges: set[tuple[str, str]] = set()
+    for connector in connectors:
+        src = node_id_to_group.get(connector.get("from", ""))
+        tgt = node_id_to_group.get(connector.get("to", ""))
+        if src and tgt and src != tgt:
+            edges.add((src, tgt))
+
+    lines = [f"flowchart {direction}"]
+    groups_by_cat: dict[str, list] = {"input": [], "compute": [], "output": []}
+    for g in groups.values():
+        groups_by_cat.setdefault(g["category"], []).append(g)
+
+    for category in ["input", "compute", "output"]:
+        cat_groups = groups_by_cat.get(category, [])
+        if not cat_groups:
+            continue
+        lines.append(f"    subgraph {category}[\"{category_titles[category]}\"]")
+        for g in cat_groups:
+            lines.append(f"        {g['id']}[\"{g['label']}\"]")
+        lines.append("    end")
+
+    for src, tgt in sorted(edges):
+        lines.append(f"    {src} --> {tgt}")
+
+    lines.extend([
+        "    classDef input fill:#14324a,stroke:#62b6ff,color:#ffffff;",
+        "    classDef compute fill:#24341f,stroke:#8ed081,color:#ffffff;",
+        "    classDef output fill:#4a2614,stroke:#ffb366,color:#ffffff;",
+    ])
+    for category in ["input", "compute", "output"]:
+        ids = [g["id"] for g in groups_by_cat.get(category, []) if g]
+        if ids:
+            lines.append(f"    class {','.join(ids)} {category};")
+
+    return "\n".join(lines)
+
+
+def _build_pipeline_mermaid_flowchart(nodes: list, connectors: list, direction: str) -> str:
+    """Pipeline 階段式流程圖（預設最可讀版本）。
+
+    流程：
+    1. 每個節點依 _assign_pipeline_stage 分配至工作流階段。
+    2. BFS 拓撲排序決定各階段的先後順序。
+    3. 每個階段合成一個方框，標籤為「中文描述 NodeA / NodeB ...」。
+    4. 跨階段連線去重後繪製。
+    """
+    # ── 1. 分配 stage ──────────────────────────────────────────────
+    id_to_stage: dict[str, str] = {}
+    stage_names: dict[str, set[str]] = {}   # stage_key -> 唯一顯示名稱集合
+
+    for node in nodes:
+        stage = _assign_pipeline_stage(node)
+        nid = node.get("id", "")
+        id_to_stage[nid] = stage
+        display = str(node.get("name") or "").strip()
+        if display:
+            stage_names.setdefault(stage, set()).add(display)
+
+    # ── 2. 拓撲 BFS 取得各節點深度 ─────────────────────────────────
+    all_ids = {n.get("id") for n in nodes}
+    from_map: dict[str, list[str]] = {}
+    in_deg: Counter = Counter()
+    for c in connectors:
+        src, tgt = c.get("from", ""), c.get("to", "")
+        if src in all_ids and tgt in all_ids:
+            from_map.setdefault(src, []).append(tgt)
+            in_deg[tgt] += 1
+
+    depth: dict[str, int] = {}
+    queue = [nid for nid in all_ids if in_deg[nid] == 0]
+    for nid in queue:
+        depth[nid] = 0
+    visited: set[str] = set(queue)
+    while queue:
+        nxt: list[str] = []
+        for nid in queue:
+            for tgt in from_map.get(nid, []):
+                if tgt not in visited:
+                    visited.add(tgt)
+                    depth[tgt] = depth.get(nid, 0) + 1
+                    nxt.append(tgt)
+        queue = nxt
+
+    # ── 3. 各階段的「代表深度」（中位數）→ 決定圖中由左到右/由上到下的順序 ──
+    stage_depths: dict[str, list[int]] = {}
+    for nid, stage in id_to_stage.items():
+        stage_depths.setdefault(stage, []).append(depth.get(nid, 0))
+
+    stage_order = sorted(
+        stage_names.keys(),
+        key=lambda s: sorted(stage_depths.get(s, [0]))[len(stage_depths.get(s, [0])) // 2]
+    )
+
+    # ── 4. 建立去重的階段間連線，並移除會造成循環的反向邊 ────────────
+    # 先依 stage_order 建立位置索引，只保留 src 位置 < tgt 位置的「前向邊」
+    stage_rank: dict[str, int] = {s: i for i, s in enumerate(stage_order)}
+
+    stage_edges: set[tuple[str, str]] = set()
+    for c in connectors:
+        src_s = id_to_stage.get(c.get("from", ""))
+        tgt_s = id_to_stage.get(c.get("to", ""))
+        if src_s and tgt_s and src_s != tgt_s:
+            # 只接受前向邊（stage rank 較小 → 較大）
+            if stage_rank.get(src_s, 0) < stage_rank.get(tgt_s, 0):
+                stage_edges.add((src_s, tgt_s))
+
+    # ── 5. 組裝 Mermaid ────────────────────────────────────────────
+    # 階段 → Mermaid 節點 ID（安全字元）
+    safe_id: dict[str, str] = {s: re.sub(r"[^A-Za-z0-9_]", "_", s) for s in stage_order}
+
+    # 顏色分類（用於 classDef）
+    _stage_color_cls = {
+        "input":           "inp",
+        "revit_model":     "inp",
+        "point_ops":       "cmp",
+        "curve_ops":       "cmp",
+        "data_assembly":   "cmp",
+        "solid_ops":       "cmp",
+        "surface_ops":     "cmp",
+        "surface_analysis":"cmp",
+        "output_geometry": "out",
+        "observation":     "out",
+    }
+
+    lines = [f"flowchart {direction}"]
+    stage_cls: dict[str, list[str]] = {"inp": [], "cmp": [], "out": []}
+
+    for stage in stage_order:
+        zh = _STAGE_LABELS_ZH.get(stage, stage)
+        names_sorted = sorted(stage_names.get(stage, set()))
+        # 去掉過長或重複意義的名稱，最多保留 5 個
+        if len(names_sorted) > 5:
+            names_sorted = names_sorted[:5]
+        name_part = " / ".join(names_sorted)
+        label = f"{zh} {name_part}".strip()
+        if len(label) > 90:
+            label = label[:87] + "..."
+        mermaid_id = safe_id[stage]
+        lines.append(f"    {mermaid_id}[\"{label}\"]")
+        cls_key = _stage_color_cls.get(stage, "cmp")
+        stage_cls[cls_key].append(mermaid_id)
+
+    lines.append("")
+    for src_s, tgt_s in sorted(stage_edges):
+        if safe_id.get(src_s) and safe_id.get(tgt_s):
+            lines.append(f"    {safe_id[src_s]} --> {safe_id[tgt_s]}")
+
+    lines.extend([
+        "    classDef inp fill:#14324a,stroke:#62b6ff,color:#ffffff;",
+        "    classDef cmp fill:#24341f,stroke:#8ed081,color:#ffffff;",
+        "    classDef out fill:#4a2614,stroke:#ffb366,color:#ffffff;",
+    ])
+    for cls_key, ids in stage_cls.items():
+        if ids:
+            lines.append(f"    class {','.join(ids)} {cls_key};")
+
+    return "\n".join(lines)
+
+
+def _build_workspace_markdown(report: dict) -> str:
+    summary = report["summary"]
+    lines = [
+        f"# {summary['workspace_name']} 腳本邏輯分析",
+        "",
+        f"> 生成時間：{summary['generated_at']}",
+        f"> 資料來源：{summary['source']}",
+        "",
+        "## 概況",
+        f"- 檔名：{summary['file_name'] or 'Home'}",
+        f"- 節點數：{summary['node_count']}",
+        f"- 連線數：{summary['connector_count']}",
+        f"- 複雜度：{summary['complexity_label']} {summary['complexity_stars']}",
+    ]
+
+    if summary.get("warning"):
+        lines.append(f"- 警告：{summary['warning']}")
+
+    lines.extend([
+        "",
+        "## 邏輯摘要",
+    ])
+    for index, step in enumerate(report["logic_steps"], 1):
+        lines.append(f"{index}. {step}")
+
+    lines.extend([
+        "",
+        "## 主要節點類型",
+    ])
+    for item in report["top_node_types"]:
+        lines.append(f"- {item['type']}: {item['count']} 個")
+
+    lines.extend([
+        "",
+        "## Mermaid",
+        "```mermaid",
+        report["mermaid"],
+        "```",
+    ])
+
+    if report["focus_nodes"]:
+        lines.extend([
+            "",
+            "## 節點摘錄",
+            "| 類別 | 節點 | 類型 | 座標 |",
+            "|:---|:---|:---|:---|",
+        ])
+        for node in report["focus_nodes"][:20]:
+            lines.append(
+                f"| {node['category']} | {node['name']} | {node['type']} | ({node['x']}, {node['y']}) |"
+            )
+
+    return "\n".join(lines)
+
+
+def _build_workspace_logic_report(payload: dict, direction: str = "LR", max_nodes: int = 60, mode: str = "pipeline") -> dict:
+    nodes = payload.get("nodes", [])
+    connectors = payload.get("connectors", [])
+    node_map = {node.get("id"): dict(node) for node in nodes}
+
+    indegree = Counter()
+    outdegree = Counter()
+    for connector in connectors:
+        outdegree[connector.get("from")] += 1
+        indegree[connector.get("to")] += 1
+
+    for node_id, node in node_map.items():
+        node["category"] = _classify_workspace_node(node, indegree[node_id], outdegree[node_id])
+
+    classified_nodes = sorted(node_map.values(), key=lambda node: (node.get("category"), node.get("x", 0), node.get("y", 0)))
+    focus_nodes, truncated = _select_focus_nodes(classified_nodes, connectors, max_nodes=max_nodes)
+    focus_ids = {node.get("id") for node in focus_nodes}
+    focus_connectors = [
+        connector for connector in connectors
+        if connector.get("from") in focus_ids and connector.get("to") in focus_ids
+    ]
+
+    type_counter = Counter(_extract_node_type(node) for node in classified_nodes)
+    complexity_label, complexity_stars = _workspace_complexity_rating(payload.get("nodeCount", 0), payload.get("connectorCount", 0))
+
+    report = {
+        "summary": {
+            "workspace_name": payload.get("workspaceName") or payload.get("workspace", {}).get("name") or "Home",
+            "file_name": payload.get("workspace", {}).get("fileName") or "",
+            "node_count": payload.get("nodeCount", len(nodes)),
+            "connector_count": payload.get("connectorCount", len(connectors)),
+            "complexity_label": complexity_label,
+            "complexity_stars": complexity_stars,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "warning": payload.get("warning"),
+            "source": "snapshot" if payload.get("processId") is None and payload.get("sessionId") is None else "live-workspace",
+            "truncated": truncated,
+        },
+        "logic_steps": _summarize_workspace_steps(classified_nodes, connectors, focus_ids),
+        "top_node_types": [
+            {"type": node_type, "count": count}
+            for node_type, count in type_counter.most_common(8)
+        ],
+        "focus_nodes": [
+            {
+                "id": node.get("id"),
+                "name": _sanitize_mermaid_label(node.get("name"), 60),
+                "type": _extract_node_type(node),
+                "category": node.get("category"),
+                "x": node.get("x", 0),
+                "y": node.get("y", 0),
+            }
+            for node in focus_nodes
+        ],
+    }
+    if mode == "detail":
+        report["mermaid"] = _build_mermaid_flowchart(focus_nodes, focus_connectors, direction=direction)
+    elif mode == "semantic":
+        report["mermaid"] = _build_semantic_mermaid_flowchart(focus_nodes, focus_connectors, direction=direction)
+    else:  # "pipeline" (default)
+        report["mermaid"] = _build_pipeline_mermaid_flowchart(focus_nodes, focus_connectors, direction=direction)
+    report["markdown"] = _build_workspace_markdown(report)
+    return report
+
+
+async def generate_workspace_mermaid(
+    sessionId: str = None,
+    snapshotPath: str = None,
+    direction: str = "TD",
+    maxNodes: int = 60,
+    saveToFile: bool = False,
+    outputPath: str = None,
+    mode: str = "pipeline",
+) -> dict:
+    """分析當前 Dynamo 工作區並生成 Mermaid 流程圖與 Markdown 摘要。
+
+    mode='pipeline'（預設）：工作流階段觀，自動分層並加中文描述，最可讀。
+    mode='semantic'   ：同名節點合成一格加數量，適合中型圖。
+    mode='detail'     ：每個 Dynamo 節點對應一格，供 debug。
+    """
+    direction = (direction or "TD").upper()
+    if direction not in {"LR", "TD", "RL", "BT"}:
+        return {"error": f"Unsupported direction: {direction}. Valid: LR, TD, RL, BT"}
+
+    safe_mode = mode if mode in {"pipeline", "semantic", "detail"} else "pipeline"
+    safe_max_nodes = max(10, min(int(maxNodes), 200))
+    payload = await _get_workspace_payload(session_id=sessionId, snapshot_path=snapshotPath)
+    if not payload.get("nodes"):
+        return {"error": "Workspace is empty; no nodes available for analysis."}
+
+    report = _build_workspace_logic_report(payload, direction=direction, max_nodes=safe_max_nodes, mode=safe_mode)
+
+    if saveToFile:
+        default_name = Path(report["summary"]["file_name"] or report["summary"]["workspace_name"] or "Home").stem or "Home"
+        target = Path(outputPath) if outputPath else (Path(__file__).parent.parent.parent / "image" / f"{default_name}_logic_analysis.md")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(report["markdown"], encoding="utf-8")
+        report["savedTo"] = str(target)
+
+    return report
+
+def _is_guid_like(text: str) -> bool:
+    try:
+        uuid.UUID(str(text))
+        return True
+    except Exception:
+        return False
+
+def _resolve_addon_guid(name: str) -> Optional[dict]:
+    if not name:
+        return None
+    if _is_guid_like(name):
+        return None
+
+    mapping = _load_addon_guid_mapping()
+    index = mapping.get("index", {})
+
+    key = str(name).strip().lower()
+    if key in index:
+        return index[key]
+
+    # 若傳入 Package.Node.SubNode，退化嘗試最後一段名稱
+    if "." in key:
+        tail = key.split(".")[-1]
+        if tail in index:
+            return index[tail]
+
+    return None
+
+def _search_addon_guid_entries(query: str, limit: int = 20) -> list:
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+
+    entries = _load_addon_guid_mapping().get("entries", [])
+    matches = []
+    for e in entries:
+        haystack = " ".join([
+            str(e.get("package", "")),
+            str(e.get("nodeDisplay", "")),
+            str(e.get("guid", "")),
+            str(e.get("note", "")),
+        ]).lower()
+        if q in haystack:
+            matches.append(e)
+            if len(matches) >= limit:
+                break
+    return matches
+
+def _normalize_addon_guid_entry(entry: dict) -> dict:
+    package = str(entry.get("package", "")).strip()
+    node_display = str(entry.get("nodeDisplay", "")).strip()
+    guid = str(entry.get("guid", "")).strip().lower()
+    note = str(entry.get("note", "")).strip()
+    source = str(entry.get("source", "")).strip()
+
+    return {
+        "package": package,
+        "nodeDisplay": node_display,
+        "guid": guid,
+        "note": note,
+        "source": source,
+    }
+
+def _merge_addon_guid_entries(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    merged = {}
+
+    for entry in existing:
+        normalized = _normalize_addon_guid_entry(entry)
+        if normalized["guid"]:
+            merged[normalized["guid"]] = normalized
+
+    for entry in incoming:
+        normalized = _normalize_addon_guid_entry(entry)
+        if normalized["guid"]:
+            merged[normalized["guid"]] = normalized
+
+    return [merged[key] for key in sorted(merged.keys())]
+
+def _write_addon_guid_mapping(entries: list[dict], source: str, output_path: str = ADDON_GUID_MAPPING_PATH) -> dict:
+    payload = {
+        "schemaVersion": "1.1",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+        "entryCount": len(entries),
+        "entries": entries,
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    global _addon_guid_mapping
+    _addon_guid_mapping = None
+    _load_addon_guid_mapping()
+
+    return payload
+
+async def _collect_workspace_guid_candidates(session_id: str = None) -> list[dict]:
+    """從當前工作區資源收集可疑外掛 GUID 候選。"""
+    resource = await read_dynamo_resource(resourceType="nodes", sessionId=session_id)
+    nodes = []
+
+    if isinstance(resource, dict):
+        nodes = resource.get("nodes", [])
+        if not nodes and isinstance(resource.get("contents"), list):
+            try:
+                content_text = resource["contents"][0].get("text", "")
+                parsed = json.loads(content_text)
+                if isinstance(parsed, dict):
+                    nodes = parsed.get("nodes", [])
+            except Exception:
+                nodes = []
+
+    candidates = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+
+        creation_name = str(node.get("creationName", "")).strip()
+        full_name = str(node.get("fullName", "")).strip()
+        display_name = str(node.get("name", "")).strip()
+
+        if not creation_name or not _is_guid_like(creation_name):
+            continue
+
+        if not display_name:
+            display_name = full_name.split(".")[-1] if full_name else creation_name
+
+        package = ""
+        if full_name and "." in full_name:
+            package = full_name.split(".")[0]
+
+        if package.startswith("Autodesk") or package.startswith("CoreNodeModels"):
+            continue
+
+        candidates.append({
+            "package": package or "Unknown",
+            "nodeDisplay": display_name,
+            "guid": creation_name.lower(),
+            "note": f"discovered from workspace node: {full_name or display_name}",
+            "source": "workspace://current/nodes",
+        })
+
+    return candidates
+
+def _collect_workspace_guid_candidates_from_snapshot(snapshot_path: str) -> list[dict]:
+    """從離線快照檔案收集外掛 GUID 候選。"""
+    if not snapshot_path:
+        return []
+
+    path = Path(snapshot_path)
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        log(f"[WARN] Failed to load snapshot {snapshot_path}: {e}")
+        return []
+
+    nodes = []
+    if isinstance(data, dict):
+        nodes = data.get("nodes", [])
+        if not nodes and isinstance(data.get("contents"), list):
+            try:
+                content_text = data["contents"][0].get("text", "")
+                parsed = json.loads(content_text)
+                if isinstance(parsed, dict):
+                    nodes = parsed.get("nodes", [])
+            except Exception:
+                nodes = []
+
+    candidates = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+
+        creation_name = str(node.get("creationName", "")).strip()
+        full_name = str(node.get("fullName", "")).strip()
+        display_name = str(node.get("name", "")).strip()
+
+        if not creation_name or not _is_guid_like(creation_name):
+            continue
+
+        if not display_name:
+            display_name = full_name.split(".")[-1] if full_name else creation_name
+
+        package = ""
+        if full_name and "." in full_name:
+            package = full_name.split(".")[0]
+
+        if package.startswith("Autodesk") or package.startswith("CoreNodeModels"):
+            continue
+
+        candidates.append({
+            "package": package or "Unknown",
+            "nodeDisplay": display_name,
+            "guid": creation_name.lower(),
+            "note": f"discovered from snapshot node: {full_name or display_name}",
+            "source": str(path).replace("\\", "/"),
+        })
+
+    return candidates
 
 # ==========================================
 # MCP Resources Layer (dynamo:// URI Protocol)
@@ -600,6 +1447,46 @@ class MCPBridgeServer:
                 "readOnlyHint": True
             },
             {
+                "name": "generate_workspace_mermaid",
+                "description": "分析當前 Dynamo 工作區邏輯，輸出 Mermaid 流程圖、邏輯摘要與 Markdown 報告。支援離線 snapshot 驗證。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "sessionId": {
+                            "type": "string",
+                            "description": "選用。指定要分析的 Session ID。"
+                        },
+                        "snapshotPath": {
+                            "type": "string",
+                            "description": "選用。離線工作區快照 JSON 路徑；提供後會優先分析快照而非即時連線。"
+                        },
+                        "direction": {
+                            "type": "string",
+                            "enum": ["LR", "TD", "RL", "BT"],
+                            "description": "Mermaid 圖表方向，預設 LR。"
+                        },
+                        "maxNodes": {
+                            "type": "integer",
+                            "description": "Mermaid 最多保留的節點數；大型圖表會自動摘要，預設 60。"
+                        },
+                        "saveToFile": {
+                            "type": "boolean",
+                            "description": "是否將 Markdown 報告寫入 image/ 或 outputPath。預設 false。"
+                        },
+                        "outputPath": {
+                            "type": "string",
+                            "description": "選用。若 saveToFile=true，可指定輸出檔案完整路徑。"
+                        },
+                        "mode": {
+                            "type": "string",
+                            "enum": ["pipeline", "semantic", "detail"],
+                            "description": "圖表模式。pipeline（預設）：工作流階段觀，最可讀；semantic：同名節點合併；detail：1:1 節點對應（debug 用）。"
+                        }
+                    }
+                },
+                "readOnlyHint": False
+            },
+            {
                 "name": "create_group",
                 "description": "將節點群組化 (Group Nodes)。能夠為指定的節點創建一個帶標題和描述的群組。",
                 "inputSchema": {
@@ -624,6 +1511,20 @@ class MCPBridgeServer:
                             "type": "string",
                             "description": "群組顏色 (Hex)",
                             "default": "#FFC1D5E0"
+                        },
+                        "sessionId": {
+                            "type": "string",
+                            "description": "選用。指定要執行的 Session ID"
+                        },
+                        "validateNodeIds": {
+                            "type": "boolean",
+                            "description": "是否先驗證 nodeIds 是否存在於工作區，預設 true",
+                            "default": True
+                        },
+                        "retryCount": {
+                            "type": "integer",
+                            "description": "失敗時重試次數，預設 2",
+                            "default": 2
                         }
                     },
                     "required": ["nodeIds"]
@@ -729,6 +1630,29 @@ class MCPBridgeServer:
                 "inputSchema": {"type": "object", "properties": {}},
                 "readOnlyHint": True
             },
+            {
+                "name": "refresh_addon_guid_mapping",
+                "description": "從當前工作區節點資源與既有知識庫更新外掛 GUID 映射表。可用於自動擴充 domain/addon_guid_mapping.json。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "sessionId": {
+                            "type": "string",
+                            "description": "選用。指定要掃描的 Session ID"
+                        },
+                        "snapshotPath": {
+                            "type": "string",
+                            "description": "選用。離線快照檔案路徑；若提供則優先從快照讀取 nodes。"
+                        },
+                        "includeKnown": {
+                            "type": "boolean",
+                            "description": "是否保留並重新寫入既有映射資料，預設為 true",
+                            "default": True
+                        }
+                    }
+                },
+                "readOnlyHint": False
+            },
         ]
         return tools
 
@@ -759,6 +1683,8 @@ class MCPBridgeServer:
                 return await list_sessions()
             elif name == "get_server_stats":
                 return get_server_stats()
+            elif name == "generate_workspace_mermaid":
+                return await generate_workspace_mermaid(**args)
             elif name == "read_dynamo_resource":
                 return await read_dynamo_resource(**args)
             elif name == "get_workspace_version":
@@ -767,6 +1693,8 @@ class MCPBridgeServer:
                 return get_memory_bank_summary(**args)
             elif name == "reload_memory_bank":
                 return reload_memory_bank()
+            elif name == "refresh_addon_guid_mapping":
+                return await refresh_addon_guid_mapping(**args)
             elif name == "create_group":
                 return await create_group(**args)
             elif name == "auto_group":
@@ -1068,10 +1996,26 @@ async def execute_dynamo_instructions(
     
     new_version = version_result["newVersion"]
     
+    mapped_nodes = []
+
     try:
         # 座標偏移與策略標註
         if "nodes" in json_data:
             for node in json_data["nodes"]:
+                original_name = node.get("name", "")
+
+                # 外掛節點映射：若提供的是名稱別名，優先解析為 GUID
+                mapped = _resolve_addon_guid(original_name)
+                if mapped:
+                    node["name"] = mapped["guid"]
+                    mapped_nodes.append({
+                        "id": node.get("id", ""),
+                        "from": original_name,
+                        "to": mapped["guid"],
+                        "package": mapped.get("package", ""),
+                        "nodeDisplay": mapped.get("nodeDisplay", "")
+                    })
+
                 route_node_creation(node)
                 node["x"] = float(node.get("x", 0)) + base_x
                 node["y"] = float(node.get("y", 0)) + base_y
@@ -1121,13 +2065,15 @@ async def execute_dynamo_instructions(
                     "status": "ok",
                     "message": "成功 (已透過軌道 A 降級重試恢復)",
                     "version": new_version,
-                    "clientId": clientId
+                    "clientId": clientId,
+                    "mappedNodes": mapped_nodes
                 }, ensure_ascii=False)
             else:
                 return json.dumps({
                     "status": "error",
                     "message": f"失敗 (重試後仍錯誤): {retry_response.get('message')}",
-                    "version": new_version
+                    "version": new_version,
+                    "mappedNodes": mapped_nodes
                 }, ensure_ascii=False)
         
         if response.get("status") == "ok":
@@ -1136,20 +2082,36 @@ async def execute_dynamo_instructions(
                 "message": "成功",
                 "version": new_version,
                 "clientId": clientId,
-                "sessionId": session_id
+                "sessionId": session_id,
+                "mappedNodes": mapped_nodes
             }, ensure_ascii=False)
         else:
             return json.dumps({
                 "status": "error",
                 "message": response.get('message'),
-                "version": new_version
+                "version": new_version,
+                "mappedNodes": mapped_nodes
             }, ensure_ascii=False)
     except Exception as e: 
-        return json.dumps({"status": "error", "message": str(e), "version": new_version}, ensure_ascii=False)
+        return json.dumps({"status": "error", "message": str(e), "version": new_version, "mappedNodes": mapped_nodes}, ensure_ascii=False)
 
 async def search_nodes_async(query: str) -> str:
     with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
-    if not sessions: return "[FAIL] 失敗: 未連線"
+
+    # 沒有 Dynamo 連線時，仍可使用本地 addon GUID 映射做離線查詢
+    if not sessions:
+        addon_hits = _search_addon_guid_entries(query)
+        if not addon_hits:
+            return "[FAIL] 失敗: 未連線"
+
+        res = [f"[SEARCH] 離線映射搜尋 '{query}' 找到 {len(addon_hits)} 個結果：\n"]
+        for n in addon_hits:
+            res.append(f"- **{n.get('package', '')}.{n.get('nodeDisplay', '')}**")
+            res.append(f"  guid: `{n.get('guid', '')}`")
+            if n.get("note"): res.append(f"  備註: {n.get('note')}")
+            res.append("")
+        return "\n".join(res)
+
     session_id = sessions[-1]
     try:
         data = await ws_manager.send_command_async(session_id, {"action": "list_nodes", "filter": query})
@@ -1170,6 +2132,16 @@ async def search_nodes_async(query: str) -> str:
             if n.get('creationName'): res.append(f"  creationName: `{n['creationName']}`")
             if n.get('description'): res.append(f"  說明: {n['description']}")
             res.append("")
+
+        addon_hits = _search_addon_guid_entries(query)
+        if addon_hits:
+            res.append("[Addon GUID 映射結果]")
+            for n in addon_hits:
+                res.append(f"- **{n.get('package', '')}.{n.get('nodeDisplay', '')}**")
+                res.append(f"  guid: `{n.get('guid', '')}`")
+                if n.get("note"): res.append(f"  備註: {n.get('note')}")
+                res.append("")
+
         return "\n".join(res)
     except Exception as e:
         return f"Error: {e}"
@@ -1389,31 +2361,175 @@ def reload_memory_bank() -> str:
     else:
         return json.dumps(result, ensure_ascii=False, indent=2)
 
-async def create_group(nodeIds: List[str], title: str = "New Group", description: str = "", color: str = "#FFC1D5E0") -> dict:
+async def refresh_addon_guid_mapping(sessionId: str = None, snapshotPath: str = None, includeKnown: bool = True) -> dict:
+    """根據目前工作區資料自動擴充外掛 GUID 映射表。"""
+    existing_entries = []
+    source_note = "workspace://current/nodes"
+
+    if includeKnown and os.path.exists(ADDON_GUID_MAPPING_PATH):
+        try:
+            with open(ADDON_GUID_MAPPING_PATH, "r", encoding="utf-8") as f:
+                existing_payload = json.load(f)
+            existing_entries = existing_payload.get("entries", []) if isinstance(existing_payload, dict) else []
+        except Exception as e:
+            log(f"[WARN] Failed to load existing addon mapping: {e}")
+
+    try:
+        if snapshotPath:
+            workspace_candidates = _collect_workspace_guid_candidates_from_snapshot(snapshotPath)
+            source_note = snapshotPath
+        else:
+            workspace_candidates = await _collect_workspace_guid_candidates(session_id=sessionId)
+
+        merged_entries = _merge_addon_guid_entries(existing_entries, workspace_candidates)
+
+        added_guids = {entry["guid"] for entry in workspace_candidates}
+        existing_guids = {str(entry.get("guid", "")).strip().lower() for entry in existing_entries if str(entry.get("guid", "")).strip()}
+        new_count = len([guid for guid in added_guids if guid not in existing_guids])
+
+        payload = _write_addon_guid_mapping(
+            merged_entries,
+            source=f"workspace refresh ({source_note}) + {ADDON_GUID_MAPPING_PATH}",
+        )
+
+        return {
+            "status": "ok",
+            "entryCount": payload["entryCount"],
+            "addedCount": len(added_guids),
+            "newCount": new_count,
+            "source": source_note,
+            "mappingPath": ADDON_GUID_MAPPING_PATH,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "mappingPath": ADDON_GUID_MAPPING_PATH,
+        }
+
+def _deduplicate_ids(ids: List[str]) -> List[str]:
+    seen = set()
+    ordered = []
+    for item in ids:
+        sid = str(item).strip()
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        ordered.append(sid)
+    return ordered
+
+async def _get_workspace_node_ids(session_id: str = None) -> set:
+    try:
+        resource = await read_dynamo_resource(resourceType="nodes", sessionId=session_id)
+    except Exception:
+        return set()
+
+    nodes = []
+    if isinstance(resource, dict):
+        nodes = resource.get("nodes", [])
+        if not nodes and isinstance(resource.get("contents"), list):
+            try:
+                content_text = resource["contents"][0].get("text", "")
+                parsed = json.loads(content_text)
+                if isinstance(parsed, dict):
+                    nodes = parsed.get("nodes", [])
+            except Exception:
+                nodes = []
+
+    return {str(n.get("id", "")).strip() for n in nodes if isinstance(n, dict) and n.get("id")}
+
+async def create_group(
+    nodeIds: List[str],
+    title: str = "New Group",
+    description: str = "",
+    color: str = "#FFC1D5E0",
+    sessionId: str = None,
+    validateNodeIds: bool = True,
+    retryCount: int = 2,
+) -> dict:
     """
     建立節點群組
     """
+    if not isinstance(nodeIds, list) or not nodeIds:
+        return {"status": "error", "message": "nodeIds 必須是非空陣列"}
+
     with ws_manager._lock:
         sessions = list(ws_manager.active_sessions.keys())
     
     if not sessions:
         return {"error": "No active Dynamo connections"}
     
-    session_id = sessions[-1]
+    if sessionId and sessionId not in sessions:
+        return {"status": "error", "message": f"找不到指定會話 {sessionId}"}
+
+    session_id = sessionId if sessionId else sessions[-1]
+    deduped_ids = _deduplicate_ids(nodeIds)
+    if not deduped_ids:
+        return {"status": "error", "message": "nodeIds 去重後為空"}
+
+    missing_ids = []
+    valid_ids = deduped_ids
+
+    if validateNodeIds:
+        workspace_ids = await _get_workspace_node_ids(session_id=session_id)
+        if workspace_ids:
+            valid_ids = [nid for nid in deduped_ids if nid in workspace_ids]
+            missing_ids = [nid for nid in deduped_ids if nid not in workspace_ids]
+
+    if not valid_ids:
+        return {
+            "status": "error",
+            "message": "沒有可分組的有效節點 ID",
+            "requestedCount": len(nodeIds),
+            "dedupedCount": len(deduped_ids),
+            "validCount": 0,
+            "missingNodeIds": missing_ids,
+        }
     
     cmd = {
         "action": "create_group",
-        "nodeIds": nodeIds,
+        "nodeIds": valid_ids,
         "title": title,
         "description": description,
         "color": color
     }
     
-    try:
-        result = await ws_manager.send_command_async(session_id, cmd)
-        return result
-    except Exception as e:
-        return {"error": str(e)}
+    safe_retry_count = max(0, min(int(retryCount), 5))
+    last_error = None
+    for attempt in range(safe_retry_count + 1):
+        try:
+            result = await ws_manager.send_command_async(session_id, cmd)
+            if result.get("status") == "ok":
+                enriched = {
+                    **result,
+                    "requestedCount": len(nodeIds),
+                    "dedupedCount": len(deduped_ids),
+                    "validCount": len(valid_ids),
+                    "missingNodeIds": missing_ids,
+                    "sessionId": session_id,
+                    "attempt": attempt + 1,
+                }
+                if missing_ids:
+                    enriched["warning"] = f"略過 {len(missing_ids)} 個不存在於工作區的節點"
+                return enriched
+
+            last_error = result.get("message", "unknown error")
+        except Exception as e:
+            last_error = str(e)
+
+        if attempt < safe_retry_count:
+            await asyncio.sleep(0.15 * (attempt + 1))
+
+    return {
+        "status": "error",
+        "message": last_error or "create_group failed",
+        "requestedCount": len(nodeIds),
+        "dedupedCount": len(deduped_ids),
+        "validCount": len(valid_ids),
+        "missingNodeIds": missing_ids,
+        "sessionId": session_id,
+        "attempts": safe_retry_count + 1,
+    }
 
 
 # 輸入節點的 fullName 前綴清單
@@ -1424,6 +2540,46 @@ _INPUT_PREFIXES = (
 # 輸出節點的 name 清單
 _OUTPUT_NAMES = {"Watch", "Watch 3D", "Python Script"}
 _OUTPUT_FULL = ("CoreNodeModels.Watch",)
+
+# ---- Pipeline stage 分類規則 (優先序由高到低) ----
+# 每個 tuple: (stage_key, [pattern_substrings...]) — 全小寫比對
+_PIPELINE_STAGES: list[tuple[str, list[str]]] = [
+    ("observation",       ["watch 3d", "watch", "python script", "python"]),
+    ("output_geometry",   ["extrude", "form.", "importinstance", "directshape", "familyinstance", "floor.", "wall.", "roof."]),
+    ("surface_analysis",  ["polysurface", "surface.area", "surface.perimeter", "surface.pointat", "surface.normal", "surface.offset"]),
+    ("surface_ops",       ["surface.byloft", "surface.bysweep", "surface.byruled", "surface.bypath", "nurbssurface.", "surface.byplane", "surface.bytrim"]),
+    ("solid_ops",         ["solid.", "sphere.", "cylinder.", "cuboid.", "cone."]),
+    ("data_assembly",     ["list.", "dictionary.", "sequence.", "createlist", "flattenlist", "transpose"]),
+    ("curve_ops",         ["line.", "arc.", "circle.", "ellipse.", "nurbscurve.", "curve.by", "polycurve.", "helix."]),
+    ("point_ops",         ["point.by", "point.origin", "vector.", "plane.", "coordinatesystem.", "uv."]),
+    ("revit_model",       ["element.", "room.", "door.", "window.", "column.", "beam.", "filteredel", "collector"]),
+    ("input",             ["number", "slider", "code block", "select", "boolean", "string", "integer", "double", "filepath", "filename"]),
+]
+
+_STAGE_LABELS_ZH: dict[str, str] = {
+    "input":           "輸入參數",
+    "revit_model":     "Revit 模型",
+    "point_ops":       "幾何建構",
+    "curve_ops":       "曲線生成",
+    "data_assembly":   "清單彙整",
+    "solid_ops":       "實體運算",
+    "surface_ops":     "曲面運算",
+    "surface_analysis":"後處理",
+    "output_geometry": "輸出幾何",
+    "observation":     "觀察輸出",
+}
+
+def _assign_pipeline_stage(node: dict) -> str:
+    """依節點顯示名稱/fullName 判斷其所屬的 Pipeline 階段 key。"""
+    name = str(node.get("name") or "").lower().strip()
+    full = str(node.get("fullName") or "").lower().strip()
+    combined = f"{name} {full}"
+    for stage_key, patterns in _PIPELINE_STAGES:
+        if any(p in combined for p in patterns):
+            return stage_key
+    # fallback: 沿用 category
+    cat = node.get("category", "compute")
+    return "input" if cat == "input" else ("observation" if cat == "output" else "surface_ops")
 
 
 async def auto_group(

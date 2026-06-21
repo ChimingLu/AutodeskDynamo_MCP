@@ -16,11 +16,11 @@ version: 1.0
 
 ```mermaid
 flowchart TD
-    A[觸發 /image] --> B[執行 analyze_workspace]
-    B --> C{取得檔名?}
+   A[觸發 /image] --> B[執行 generate_workspace_mermaid]
+   B --> C{取得檔名?}
     C -->|是 Home| D[提示使用者存檔]
-    C -->|有檔名| E[分析工作區結構]
-    E --> F[生成 Mermaid 圖表]
+   C -->|有檔名| E[分析工作區結構]
+   E --> F[生成 Mermaid 圖表與邏輯摘要]
     F --> G[生成技術文檔]
     G --> H[生成視覺化儀表板]
     H --> I[儲存至 image/]
@@ -36,6 +36,42 @@ flowchart TD
 | 技術文檔 | Markdown | `image/[filename]_analysis.md` |
 | 儀表板圖片 | PNG/WebP | `image/[filename]_dashboard.*` |
 | Mermaid 原始碼 | 內嵌於 MD | - |
+
+---
+
+## 🧩 正式工具入口
+
+`/image` 或腳本邏輯分析應優先使用 `generate_workspace_mermaid`，而不是只靠 `analyze_workspace` 原始 JSON 手工推論。
+
+建議參數（預設最可讀版本）：
+
+```json
+{
+   "direction": "TD",
+   "mode": "pipeline",
+   "maxNodes": 60,
+   "saveToFile": true
+}
+```
+
+`mode` 三種選擇：
+
+| mode | 說明 |
+|------|------|
+| `pipeline`（預設） | 工作流階段觀，自動分層加中文描述，最可讀 |
+| `semantic` | 同名節點合併並標注數量 |
+| `detail` | 每個節點 1:1 對應（debug 用） |
+
+可選強化（先驗證再發佈）：
+
+```bash
+python tools/generate_mermaid_artifacts.py --save --output image/current_workspace_logic.md --validate --render png
+```
+
+說明：
+
+1. `--validate`：先用 `mmdc` 驗證 Mermaid 能成功渲染。
+2. `--render png`：輸出 PNG 供文件或簡報直接使用。
 
 ---
 
