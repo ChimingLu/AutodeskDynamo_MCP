@@ -1,3 +1,5 @@
+
+
 ﻿**語言 / Language:** [繁體中文](README.md) | [English](README_EN.md)
 
 ---
@@ -132,6 +134,7 @@ graph TD
 - `get_script_library` - 取得腳本庫清單
 - `clear_workspace` - 清除工作區
 - `list_sessions` - 查看連線工作階段
+- `get_server_stats` - 取得伺服器連線狀態與工作階段數
 - `get_workspace_version` - 取得工作區版本 (樂觀鎖控制)
 
 ### Antigravity 專屬功能（可選）
