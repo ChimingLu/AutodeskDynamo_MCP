@@ -23,6 +23,8 @@ from typing import Any, Dict, Optional, List
 from pathlib import Path
 from collections import Counter
 
+import node_registry
+
 # 全域日誌函數
 def log(m): print(m, file=sys.stderr)
 
@@ -1399,8 +1401,76 @@ class MCPBridgeServer:
                 "destructiveHint": True
             },
             {
+                "name": "get_node_recipe",
+                "description": "【建圖前先呼叫】從已驗證節點 registry (domain/node_registry.json) 批次查詢節點的正確建立名稱 (create)、輸入/輸出埠順序、設值方式、錯誤名稱與已知陷阱，並附全域規則。離線可用、不分大小寫，也接受錯誤名稱/fullName。查不到的才用 search_nodes。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "要查詢的節點名稱清單（例如 ['String', 'List.FilterByBoolMask', 'Element.Name']）"
+                        },
+                        "includeRules": {
+                            "type": "boolean",
+                            "description": "是否附上全域規則，預設 true",
+                            "default": True
+                        }
+                    },
+                    "required": ["names"]
+                },
+                "readOnlyHint": True
+            },
+            {
+                "name": "get_node_pattern",
+                "description": "查詢已記住的節點連接模式（例：選擇品類→視圖中該品類的所有元件），回傳含節點與連線、每次新 GUID、可直接傳給 execute_dynamo_instructions 的 JSON。可用中文描述或關鍵字搜尋；query 留空則列出全部模式。離線可用。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "模式名稱、關鍵字或需求描述（例：'品類 視圖 元件'）。留空列出全部。"},
+                        "baseX": {"type": "number", "description": "放置位置 X 偏移，預設 0"},
+                        "baseY": {"type": "number", "description": "放置位置 Y 偏移，預設 0"}
+                    }
+                },
+                "readOnlyHint": True
+            },
+            {
+                "name": "save_node_pattern",
+                "description": "把剛成功建立的一組節點+連線存成可重用的連接模式。instructions 用剛送給 execute_dynamo_instructions 的同一份 JSON（節點 id 需為 GUID）；若 Dynamo 已連線，會先確認這些節點與連線確實存在於工作區，全部存在才標記為 verified。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "模式名稱（例：'品類→視圖中所有元件'）"},
+                        "instructions": {"type": "string", "description": "剛執行成功的 JSON（含 nodes 與 connectors）"},
+                        "description": {"type": "string", "description": "這個模式做什麼、何時使用"},
+                        "keywords": {"type": "array", "items": {"type": "string"}, "description": "搜尋關鍵字（中英文皆可）"},
+                        "gotchas": {"type": "array", "items": {"type": "string"}, "description": "已知陷阱"},
+                        "overwrite": {"type": "boolean", "description": "同名模式已存在時是否覆寫，預設 false"}
+                    },
+                    "required": ["name", "instructions"]
+                },
+                "readOnlyHint": False
+            },
+            {
+                "name": "capture_node_pattern",
+                "description": "把使用者在 Dynamo 畫面上手動建好的節點+連線擷取成可重用的連接模式。預設擷取目前選取的節點（請使用者先在 Dynamo 框選），或用 nodeIds 指定。建立名稱優先取自已驗證 registry；節點值（String、Code Block、Python）從已存檔的 .dyn 讀取。存成 status 'captured'，跑 tests/verify_node_registry_live.py 通過後變 verified。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "模式名稱"},
+                        "description": {"type": "string", "description": "這個模式做什麼、何時使用"},
+                        "keywords": {"type": "array", "items": {"type": "string"}, "description": "搜尋關鍵字（中英文皆可）"},
+                        "gotchas": {"type": "array", "items": {"type": "string"}, "description": "已知陷阱"},
+                        "nodeIds": {"type": "array", "items": {"type": "string"}, "description": "選用。要擷取的節點 GUID；未提供則用目前選取的節點"},
+                        "overwrite": {"type": "boolean", "description": "同名模式已存在時是否覆寫，預設 false"}
+                    },
+                    "required": ["name"]
+                },
+                "readOnlyHint": False
+            },
+            {
                 "name": "search_nodes",
-                "description": "在 Dynamo 庫中搜尋節點。這會返回節點的 fullName，可用於 execute_dynamo_instructions。",
+                "description": "在 Dynamo 庫中搜尋節點（先用 get_node_recipe，查不到的再用這個）。每個結果的 create 欄位即可傳給 execute_dynamo_instructions 的 name；不要使用 fullName。",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1666,6 +1736,14 @@ class MCPBridgeServer:
                 return await execute_dynamo_instructions(**args)
             elif name == "search_nodes":
                 return await search_nodes_async(**args)
+            elif name == "get_node_recipe":
+                return get_node_recipe(**args)
+            elif name == "get_node_pattern":
+                return get_node_pattern(**args)
+            elif name == "save_node_pattern":
+                return await save_node_pattern(**args)
+            elif name == "capture_node_pattern":
+                return await capture_node_pattern(**args)
             elif name == "analyze_workspace":
                 return await analyze_workspace()
             elif name == "get_graph_status":
@@ -1947,6 +2025,39 @@ def _generate_dry_run_report(json_data: dict, base_x: float, base_y: float) -> d
     
     return report
 
+def _registry_autolearn_enabled() -> bool:
+    return bool(CONFIG.get("node_registry", {}).get("auto_learn", True))
+
+async def _safe_send(session_id: str, payload: dict) -> Optional[dict]:
+    try:
+        data = await ws_manager.send_command_async(session_id, payload)
+        if isinstance(data, dict) and data.get("status") != "error":
+            return data
+    except Exception as e:
+        log(f"[NodeRegistry] {payload.get('action')} failed: {e}")
+    return None
+
+async def _learn_node_registry(session_id: str, sent_nodes: list, pre_existing_ids: set, errors: list, skip_ids: set) -> Optional[dict]:
+    """execute 後自動學習：新建立成功的節點記錄為 auto-verified；未建立出來的名稱記入 badNames。"""
+    try:
+        status = await _safe_send(session_id, {"action": "get_graph_status"})
+        if status is None:
+            return None
+        structured = await _safe_send(session_id, {"action": "get_nodes_structured"}) or {}
+        version = CONFIG.get("node_registry", {}).get("dynamo_version") \
+            or node_registry.detect_dynamo_version(status.get("processId"))
+        report = node_registry.learn_from_execution(
+            sent_nodes, pre_existing_ids, status.get("nodes") or [], structured.get("nodes") or [],
+            errors=errors, dynamo_version=version, skip_ids=skip_ids,
+        )
+        if report["learned"] or report["badNames"]:
+            log(f"[NodeRegistry] learned={report['learned']} badNames={report['badNames']}")
+        report = {k: v for k, v in report.items() if v}
+        return report or None
+    except Exception as e:
+        log(f"[NodeRegistry] auto-learn failed: {e}")
+        return None
+
 async def execute_dynamo_instructions(
     instructions: str, 
     clear_before_execute: bool = False, 
@@ -2020,12 +2131,40 @@ async def execute_dynamo_instructions(
                 node["x"] = float(node.get("x", 0)) + base_x
                 node["y"] = float(node.get("y", 0)) + base_y
         
-        if clear_before_execute: 
+        # Node Registry：已知錯誤名稱自動改用已驗證的 create 名稱
+        registry_corrections = []
+        try:
+            registry_corrections = node_registry.correct_instruction_names(json_data.get("nodes", []))
+        except Exception as e:
+            log(f"[NodeRegistry] correction skipped: {e}")
+
+        if clear_before_execute:
             await ws_manager.send_command_async(session_id, {"action": "clear_graph"})
-        
+
+        learn_enabled = _registry_autolearn_enabled() and any(
+            node_registry.is_guid(n.get("id")) for n in json_data.get("nodes", [])
+        )
+        pre_existing_ids = None
+        if learn_enabled:
+            pre_status = await _safe_send(session_id, {"action": "get_graph_status"})
+            if pre_status is not None and isinstance(pre_status.get("nodes"), list):
+                pre_existing_ids = {str(n.get("id", "")).lower() for n in pre_status["nodes"]}
+            else:
+                learn_enabled = False  # 無法判斷哪些是新節點時不學習，避免把 upsert 的名稱誤記為已驗證
+
         # 首次嘗試執行
         response = await ws_manager.send_command_async(session_id, json_data)
-        
+
+        registry_report = None
+        if learn_enabled:
+            registry_report = await _learn_node_registry(
+                session_id, json_data.get("nodes", []), pre_existing_ids,
+                response.get("errors") or [], {m["id"] for m in mapped_nodes}
+            )
+        registry_extra = {}
+        if registry_corrections: registry_extra["registryCorrections"] = registry_corrections
+        if registry_report: registry_extra["registry"] = registry_report
+
         # [核心優化] 差異化重試與降級機制 (Differentiated Fallback)
         if response.get("status") == "error" and allow_fallback:
             log(f"[Fallback] 軌道 B 執行失敗，嘗試降級至軌道 A (Code Block)... 錯誤: {response.get('message')}")
@@ -2066,14 +2205,16 @@ async def execute_dynamo_instructions(
                     "message": "成功 (已透過軌道 A 降級重試恢復)",
                     "version": new_version,
                     "clientId": clientId,
-                    "mappedNodes": mapped_nodes
+                    "mappedNodes": mapped_nodes,
+                    **registry_extra
                 }, ensure_ascii=False)
             else:
                 return json.dumps({
                     "status": "error",
                     "message": f"失敗 (重試後仍錯誤): {retry_response.get('message')}",
                     "version": new_version,
-                    "mappedNodes": mapped_nodes
+                    "mappedNodes": mapped_nodes,
+                    **registry_extra
                 }, ensure_ascii=False)
         
         if response.get("status") == "ok":
@@ -2083,14 +2224,16 @@ async def execute_dynamo_instructions(
                 "version": new_version,
                 "clientId": clientId,
                 "sessionId": session_id,
-                "mappedNodes": mapped_nodes
+                "mappedNodes": mapped_nodes,
+                **registry_extra
             }, ensure_ascii=False)
         else:
             return json.dumps({
                 "status": "error",
                 "message": response.get('message'),
                 "version": new_version,
-                "mappedNodes": mapped_nodes
+                "mappedNodes": mapped_nodes,
+                **registry_extra
             }, ensure_ascii=False)
     except Exception as e: 
         return json.dumps({"status": "error", "message": str(e), "version": new_version, "mappedNodes": mapped_nodes}, ensure_ascii=False)
@@ -2117,19 +2260,28 @@ async def search_nodes_async(query: str) -> str:
         data = await ws_manager.send_command_async(session_id, {"action": "list_nodes", "filter": query})
         if data.get("status") == "error": return f"[FAIL] 搜尋出錯: {data.get('message')}"
         
-        # If the backend provided a formatted display string, use it
-        if data.get("display"):
-            return data["display"]
-
+        # 不使用 C# 端的 display：其 fullName（例：DSCoreNodes.DSCore.String.Split）無法建立節點
         nodes = data.get("nodes", [])
         if not nodes: return f"[SEARCH] 搜尋 '{query}': 找不到任何節點。"
-        
-        # Fallback formatting
-        res = [f"[SEARCH] 搜尋 '{query}' 找到 {data.get('count', 0)} 個結果 (僅列出前 50 個):\n"]
+
+        registry = node_registry.load_registry()
+        registry_index = node_registry.build_index(registry)
+        res = [
+            f"[SEARCH] 搜尋 '{query}' 找到 {data.get('count', len(nodes))} 個結果 (僅列出前 50 個)。",
+            "建立節點請用 create 欄位（[registry] = 已驗證）；fullName 無法建立節點。\n",
+        ]
         for n in nodes:
-            res.append(f"- **{n['name']}**")
-            res.append(f"  fullName: `{n['fullName']}`")
-            if n.get('creationName'): res.append(f"  creationName: `{n['creationName']}`")
+            create, source = node_registry.resolve_create_name(
+                n.get("name", ""), n.get("fullName", ""), n.get("creationName", ""), registry, registry_index,
+                n.get("type", "")
+            )
+            res.append(f"- **{n.get('name', '')}**")
+            if source == "ambiguous":
+                res.append(f"  create: [WARNING] `{create}` 會建出其他同名節點（見 get_node_recipe），目前沒有已知可建立的名稱")
+            else:
+                res.append(f"  create: `{create}`" + ("  [registry]" if source == "registry" else ""))
+            if n.get("creationName") and n["creationName"] not in (create, n.get("fullName")):
+                res.append(f"  creationName: `{n['creationName']}`")
             if n.get('description'): res.append(f"  說明: {n['description']}")
             res.append("")
 
@@ -2212,9 +2364,106 @@ async def clear_workspace() -> str:
     res = await ws_manager.send_command_async(sessions[-1], {"action": "clear_graph"})
     return "[OK] 已清空" if res.get("status") == "ok" else f"[FAIL] 失敗"
 
+def get_node_recipe(names: list = None, includeRules: bool = True) -> str:
+    if isinstance(names, str):
+        names = [names]
+    try:
+        result = node_registry.lookup_recipes(names or [], include_rules=includeRules)
+    except Exception as e:
+        return f"[FAIL] 讀取 node_registry.json 失敗: {e}"
+    return node_registry.format_recipes(result)
+
+def get_node_pattern(query: str = "", baseX: float = 0, baseY: float = 0) -> str:
+    try:
+        matches = node_registry.search_patterns(query or "")
+    except Exception as e:
+        return f"[FAIL] 讀取 node_registry.json 失敗: {e}"
+    if not query:
+        lines = ["[PATTERN] 全部連接模式（用 get_node_pattern(query=名稱) 取得可執行 JSON）:"]
+        for name, pattern, _ in matches:
+            desc = pattern.get("description", "") if isinstance(pattern, dict) else pattern
+            lines.append(f"- {name}: {desc}")
+        return "\n".join(lines)
+    return node_registry.format_patterns(matches, float(baseX or 0), float(baseY or 0))
+
+async def save_node_pattern(name: str, instructions: str, description: str = "", keywords: list = None,
+                            gotchas: list = None, overwrite: bool = False, sessionId: str = None) -> str:
+    try:
+        data = json.loads(instructions) if isinstance(instructions, str) else instructions
+    except json.JSONDecodeError as e:
+        return json.dumps({"status": "error", "message": f"JSON 解析錯誤: {e}"}, ensure_ascii=False)
+    if isinstance(data, list):
+        data = {"nodes": data, "connectors": []}
+
+    # 對照目前工作區：節點與連線都在才算 verified
+    problems, version = None, None
+    with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
+    if sessions:
+        session_id = sessionId if sessionId in sessions else sessions[-1]
+        status = await _safe_send(session_id, {"action": "get_graph_status"})
+        if status is not None:
+            problems = node_registry.check_pattern_in_graph(data, status.get("nodes") or [], status.get("connectors") or [])
+            version = CONFIG.get("node_registry", {}).get("dynamo_version") \
+                or node_registry.detect_dynamo_version(status.get("processId"))
+    result = node_registry.save_pattern(name, data, description, keywords, gotchas, problems, version, overwrite)
+    if result.get("status") == "ok" and problems is None:
+        result["note"] = "Dynamo 未連線，無法對照工作區，模式標記為 unverified"
+    return json.dumps(result, ensure_ascii=False)
+
+async def capture_node_pattern(name: str, description: str = "", keywords: list = None, gotchas: list = None,
+                               nodeIds: list = None, overwrite: bool = False, sessionId: str = None) -> str:
+    def fail(msg): return json.dumps({"status": "error", "message": msg}, ensure_ascii=False)
+
+    with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
+    if not sessions: return fail("Dynamo 未連線")
+    session_id = sessionId if sessionId in sessions else sessions[-1]
+    status = await _safe_send(session_id, {"action": "get_graph_status"})
+    structured = await _safe_send(session_id, {"action": "get_nodes_structured"})
+    if status is None or structured is None: return fail("無法讀取工作區")
+
+    source = "nodeIds"
+    if not nodeIds:
+        nodeIds = [n["id"] for n in structured.get("nodes") or [] if n.get("isSelected")]
+        source = "selection"
+        if not nodeIds:
+            return fail("沒有選取任何節點：請先在 Dynamo 框選要存成模式的節點，或提供 nodeIds")
+
+    # 節點值只能從已存檔的 .dyn 讀（MCP 讀不到）
+    dyn, dyn_note = None, None
+    file_name = (status.get("workspace") or {}).get("fileName") or ""
+    if file_name and os.path.exists(file_name):
+        try:
+            with open(file_name, "r", encoding="utf-8-sig") as f:
+                dyn = json.load(f)
+            saved = datetime.fromtimestamp(os.path.getmtime(file_name)).strftime("%Y-%m-%d %H:%M")
+            dyn_note = f"節點值取自存檔 {os.path.basename(file_name)}（{saved}）；之後未存檔的修改不會包含"
+        except Exception as e:
+            dyn_note = f"讀取 .dyn 失敗，未取得節點值: {e}"
+    else:
+        dyn_note = "工作區未存檔，無法取得節點值（String、Code Block、Python 等需手動補）"
+
+    built = node_registry.build_pattern_from_workspace(
+        status.get("nodes") or [], status.get("connectors") or [], nodeIds, structured.get("nodes") or [], dyn)
+    all_gotchas = list(gotchas or []) + [f"模式外輸入: {e}" for e in built["externalInputs"]]
+    version = CONFIG.get("node_registry", {}).get("dynamo_version") \
+        or node_registry.detect_dynamo_version(status.get("processId"))
+    result = node_registry.save_pattern(name, built["instructions"], description, keywords, all_gotchas,
+                                        problems=None, dynamo_version=version, overwrite=overwrite,
+                                        status="captured")
+    if result.get("status") == "ok":
+        result.update({
+            "capturedFrom": source,
+            "createSources": dict(Counter(built["sources"].values())),
+            "warnings": built["warnings"],
+            "externalInputs": built["externalInputs"],
+            "valueNote": dyn_note,
+            "next": "在空白工作區執行 python tests/verify_node_registry_live.py 驗證，通過後狀態會改為 verified",
+        })
+    return json.dumps(result, ensure_ascii=False)
+
 def get_mcp_guidelines() -> str:
     g, q = _load_guidelines()
-    return f"# GUIDELINES\\n\\n{g}\\n\\n# QUICK REF\\n\\n{q}"
+    return f"# GUIDELINES\n\n{g}\n\n# QUICK REF\n\n{q}"
 
 def get_script_library() -> str:
     scripts = []

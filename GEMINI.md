@@ -1,5 +1,13 @@
 為了確保 AI 在控制 Autodesk Dynamo 時不發生低級錯誤（如點座標重疊、誤用 2D 節點等），特訂定此規範。**AI 在執行任何繪圖指令前必須檢查此規範。**
 
+> [!IMPORTANT]
+> **建圖前先查節點 registry**：建立圖表前，先以 `get_node_recipe` 一次查詢所有要用的節點（回傳已驗證的 `create` 名稱、埠順序、設值方式、陷阱與全域規則）；只有查不到的節點才用 `search_nodes`，並使用其 `create` 欄位（不要用 fullName）。
+> Registry 位於 `domain/node_registry.json`；`execute_dynamo_instructions` 成功後會自動學習新節點（status `auto-verified`，節點 id 需為 GUID），建立失敗或建出同名其他節點的名稱會記入 `badNames`。
+>
+> **常用連線組合先查模式**：需求像「選擇品類 → 視圖中該品類的所有元件」這類常見組合，先用 `get_node_pattern(query="需求描述")`，它會回傳含連線、每次新 GUID、可直接執行的 JSON。自己組出新的組合並執行成功後，用 `save_node_pattern`（instructions 傳剛執行的同一份 JSON）存起來；Dynamo 連線時會對照工作區確認節點與連線都存在才標記 `verified`。
+> 使用者在 Dynamo 手動拉好的組合：請使用者框選節點（建議先存檔，才能一併擷取 String/Code Block/Python 的值），再呼叫 `capture_node_pattern(name, description, keywords)`；存成 `captured`，實機驗證通過後自動變 `verified`。
+> 驗證全部 registry 與模式：在空白工作區執行 `python tests/verify_node_registry_live.py`（`--keep` 保留在畫面上）。
+
 ## 📂 專案結構
 
 - **`bridge/`**: **[核心橋接]** 存放通訊與工具邏輯。

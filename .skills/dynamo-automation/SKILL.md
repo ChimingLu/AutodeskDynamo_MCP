@@ -22,6 +22,10 @@ If you're using Claude Desktop, Gemini CLI, or other AI agents:
 
 ---
 
+## Node Registry First
+
+Before building any graph: `get_node_pattern(query)` for common chains, `get_node_recipe(names)` for every node, `search_nodes` only for misses. After a reusable chain works, store it with `save_node_pattern` (executed JSON) or `capture_node_pattern` (user's selection in Dynamo). Details: [quick-start.md](../../docs/ai-guide/quick-start.md).
+
 ## Quick Start
 
 ### 1. Environment Check

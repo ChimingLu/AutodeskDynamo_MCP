@@ -1,0 +1,741 @@
+{
+  "_schema": "node_registry v1 - 已驗證可用的節點建立方式。Agent 建立節點前先查此表，查不到才用 search_nodes。",
+  "_fields": {
+    "create": "傳給 execute_dynamo_instructions 的 name（已驗證可建立）",
+    "inputs": "輸入埠順序（toPort index = 陣列索引）",
+    "outputs": "輸出埠順序（fromPort index）",
+    "value": "如何設定值",
+    "badNames": "會建錯/建不出來的名稱",
+    "gotchas": "已知陷阱",
+    "verified": "驗證環境"
+  },
+  "globalRules": [
+    "search_nodes 回傳的 fullName（例：DSCoreNodes.DSCore.String.Split）無法建立節點；請用本表 create，或 get_graph_status 回傳的 creationName（例：DSCore.String.Split@string,string[]）。",
+    "UI 節點（下拉選單等）若顯示名稱建錯或建不出來，改用類別全名（get_graph_status 的 fullName，例：DSRevitNodesUI.Views、CoreNodeModels.Input.StringInput）；search_nodes 的『分類.名稱』（例：Selection.Categories）無法建立 UI 節點。",
+    "節點 id 請用 GUID 字串：非 GUID 的 id 每次送出都會產生新節點（無法 upsert 更新）。",
+    "同一 GUID 再送一次 = 更新（位置、value、Python code、連線）。Boolean 的 value 只在第二次送出（upsert）時生效。",
+    "Code Block 內呼叫 List.* 必須寫成 DSCore.List.*，否則『找到 List 的多個定義』而輸出 null。",
+    "Code Block 每一行 statement 一個輸出埠；輸入埠依變數第一次出現的順序。",
+    "Code Block 中對 var[]..[] 參數逐項運算用複製導引 <1>（例：DSCore.List.Count(g<1>)）；@L2 在 Dynamo 2.6 無效。",
+    "Python Script 程式碼避免反斜線跳脫（\\n 等），曾導致 EOL while scanning string；換行用 unichr(10)，路徑用正斜線。",
+    "Dynamo 2.6 (Revit 2021) Python 為 IronPython2。",
+    "禁止在 Python 節點內透過 DynamoRevit/Dispatcher 刪除節點或修改工作區，會導致 Dynamo 當掉。",
+    "無法透過 MCP 讀取節點輸出值；需要驗證時請使用者執行並回報，或檢查匯出的檔案。"
+  ],
+  "nodes": {
+    "String": {"create": "CoreNodeModels.Input.StringInput", "outputs": [""], "value": "value 欄位，建立時即生效", "badNames": ["String", "Core.Input.String"], "verified": "Dynamo 2.6 / Revit 2021"},
+    "Boolean": {"create": "CoreNodeModels.Input.BoolSelector", "outputs": [""], "value": "value: \"true\"；需以相同 GUID 再送一次才生效", "badNames": ["Boolean", "Core.Input.Boolean"], "verified": "Dynamo 2.6 / Revit 2021"},
+    "Code Block": {"create": "Code Block", "value": "value 欄位放 DesignScript，結尾 ;", "gotchas": ["List.* 要寫 DSCore.List.*", "多行 = 多輸出埠"], "verified": "Dynamo 2.6 / Revit 2021"},
+    "Python Script": {"create": "Python Script", "inputs": ["IN[0]", "IN[1]..."], "outputs": ["OUT"], "value": "pythonCode 欄位；inputCount 設定輸入數；未接的 IN 會讓節點不執行", "verified": "Dynamo 2.6 / Revit 2021 (IronPython2)"},
+    "Watch": {"create": "Watch", "inputs": [""], "outputs": [""], "verified": "Dynamo 2.6 / Revit 2021", "badNames": ["View.Watch"]},
+    "Or": {"create": "Or", "inputs": ["bool0", "bool1"], "gotchas": ["對布林清單不會逐項運算，輸出 null。清單請改用其他方式（例：先 String.Replace 正規化再單一 String.Contains）"], "verified": "Dynamo 2.6 / Revit 2021"},
+    "List.GetItemAtIndex": {"create": "List.GetItemAtIndex", "inputs": ["list", "index"], "outputs": ["item"], "verified": "Dynamo 2.6"},
+    "List.FilterByBoolMask": {"create": "List.FilterByBoolMask", "inputs": ["list", "mask"], "outputs": ["in", "out"], "verified": "Dynamo 2.6"},
+    "List.GroupByKey": {"create": "List.GroupByKey", "inputs": ["list", "keys"], "outputs": ["groups", "unique keys"], "verified": "Dynamo 2.6"},
+    "List.AddItemToFront": {"create": "List.AddItemToFront", "inputs": ["item", "list"], "outputs": ["list"], "verified": "Dynamo 2.6"},
+    "List.Count": {"create": "List.Count", "inputs": ["list"], "outputs": ["count"], "verified": "Dynamo 2.6"},
+    "List.Contains": {"create": "List.Contains", "inputs": ["list", "item"], "gotchas": ["item 為 var[]..[]，傳入清單不會逐項判斷；逐項請用 Code Block: DSCore.List.Contains(all, items<1>);"], "verified": "Dynamo 2.6"},
+    "Object.IsNull": {"create": "Object.IsNull", "inputs": ["obj"], "outputs": ["bool"], "verified": "Dynamo 2.6"},
+    "String.Contains": {"create": "String.Contains", "inputs": ["str", "searchFor", "ignoreCase"], "outputs": ["bool"], "verified": "Dynamo 2.6"},
+    "String.Replace": {"create": "String.Replace", "inputs": ["str", "searchFor", "replaceWith"], "outputs": ["str"], "gotchas": ["區分大小寫"], "verified": "Dynamo 2.6"},
+    "String.IndexOf": {"create": "String.IndexOf", "inputs": ["str", "searchFor", "ignoreCase"], "outputs": ["index"], "verified": "Dynamo 2.6"},
+    "String.Substring": {"create": "String.Substring", "inputs": ["str", "startIndex", "length"], "outputs": ["substring"], "verified": "Dynamo 2.6"},
+    "String.TrimWhitespace": {"create": "String.TrimWhitespace", "inputs": ["str"], "outputs": ["str"], "verified": "Dynamo 2.6"},
+    "String.Split": {"create": "String.Split", "inputs": ["str", "separator0"], "outputs": ["strings"], "gotchas": ["可變參數節點；目前 MCP 無法增加 separator 埠（待部署 inputCount 支援）"], "verified": "Dynamo 2.6"},
+    "DateTime.Now": {"create": "DateTime.Now", "outputs": ["dateTime"], "verified": "Dynamo 2.6"},
+    "DateTime.Format": {"create": "DateTime.Format", "inputs": ["dateTime", "format"], "outputs": ["string"], "verified": "Dynamo 2.6"},
+    "Data.ExportExcel": {"create": "Data.ExportExcel", "inputs": ["filePath", "sheetName", "startRow", "startCol", "data", "overWrite"], "outputs": ["data"], "gotchas": ["需安裝 Microsoft Excel", "多個節點可寫同一檔案的不同工作表", "自動執行模式下建立節點就會開啟 Excel 寫檔"], "verified": "Dynamo 2.6 / Revit 2021"},
+    "Document.Current": {"create": "Document.Current", "outputs": ["Document"], "verified": "Revit 2021"},
+    "Document.FilePath": {"create": "Document.FilePath", "inputs": ["document"], "outputs": ["string"], "verified": "Revit 2021"},
+    "Category.ByName": {"create": "Category.ByName", "inputs": ["name"], "outputs": ["Category"], "value": "可接受 BuiltInCategory 名稱，例：\"OST_Views\"", "verified": "Revit 2021"},
+    "All Elements of Category": {"create": "All Elements of Category", "inputs": ["Category"], "outputs": ["Elements"], "gotchas": ["視圖品類會回傳少數 null 元素，下游先用 Object.IsNull + FilterByBoolMask 過濾"], "verified": "Revit 2021", "badNames": ["Selection.All Elements of Category"]},
+    "Rooms By Status": {"create": "Rooms By Status", "outputs": ["PlacedRooms", "UnplacedRooms", "NotEnclosedRooms", "RedundantRooms"], "verified": "Revit 2021"},
+    "Element.Name": {"create": "Element.Name", "inputs": ["element"], "outputs": ["string"], "verified": "Revit 2021"},
+    "Element.Id": {"create": "Element.Id", "inputs": ["element"], "outputs": ["int"], "verified": "Revit 2021"},
+    "Room.Number": {"create": "Room.Number", "inputs": ["room"], "outputs": ["string"], "verified": "Revit 2021"},
+    "Room.Name": {"create": "Revit.Elements.Room.Name", "inputs": ["room"], "outputs": ["string"], "gotchas": ["輸入為空清單時顯示 get_Name 多載不明確警告；有實際房間時正常"], "verified": "Revit 2021"},
+    "String.Join": {"create": "String.Join", "inputs": ["separator", "string0"], "outputs": ["str"], "creationName": "DSCore.String.Join@string,string[]", "nodeName": "String.Join", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "String.ToUpper": {"create": "String.ToUpper", "inputs": ["str"], "outputs": ["str"], "creationName": "DSCore.String.ToUpper@string", "nodeName": "String.ToUpper", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Categories": {"create": "Categories", "inputs": [], "outputs": ["Category"], "nodeName": "Categories", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)", "badNames": ["Selection.Categories"], "value": "下拉選單只能用索引設值（value: \"5\"），且需同 GUID 第二次送出才生效；索引對應的品類依 Revit 語系而異", "gotchas": ["要由 AI 固定品類，請改用 String(\"OST_Walls\") → Category.ByName", "送品類名稱（例 \"Walls\"）會 FormatException"]},
+    "All Elements of Category in View": {"create": "All Elements of Category in View", "inputs": ["Category", "View"], "outputs": ["Elements"], "nodeName": "All Elements of Category in View", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)", "badNames": ["Selection.All Elements of Category in View"]},
+    "Document.ActiveView": {"create": "Document.ActiveView", "inputs": ["document"], "outputs": ["View"], "creationName": "Revit.Application.Document.ActiveView", "nodeName": "Document.ActiveView", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Views": {"create": "DSRevitNodesUI.Views", "inputs": [], "outputs": ["Views"], "badNames": ["Views"], "gotchas": ["'Views' 會建出 Sheet.Views（圖紙上的視圖），不是視圖下拉選單；請用類別全名 DSRevitNodesUI.Views"], "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Revit.Elements.Element.GetParameterValueByName@string": {"create": "Revit.Elements.Element.GetParameterValueByName@string", "inputs": ["element", "parameterName"], "outputs": ["var[]..[]"], "creationName": "Revit.Elements.Element.GetParameterValueByName@string", "nodeName": "Element.GetParameterValueByName", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "DSOffice.Data.ImportExcel@var,string,bool,bool": {"create": "DSOffice.Data.ImportExcel@var,string,bool,bool", "inputs": ["file", "sheetName", "readAsStrings", "showExcel"], "outputs": ["data"], "creationName": "DSOffice.Data.ImportExcel@var,string,bool,bool", "nodeName": "Data.ImportExcel", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "CoreNodeModels.Input.FileObject": {"create": "CoreNodeModels.Input.FileObject", "inputs": ["path"], "outputs": ["file"], "nodeName": "File From Path", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "CoreNodeModels.Input.Filename": {"create": "CoreNodeModels.Input.Filename", "inputs": [], "outputs": [""], "nodeName": "File Path", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "DSCore.List.Transpose@var[]..[]": {"create": "DSCore.List.Transpose@var[]..[]", "inputs": ["lists"], "outputs": ["lists"], "creationName": "DSCore.List.Transpose@var[]..[]", "nodeName": "List.Transpose", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "DSCore.List.RestOfItems@var[]..[]": {"create": "DSCore.List.RestOfItems@var[]..[]", "inputs": ["list"], "outputs": ["rest"], "creationName": "DSCore.List.RestOfItems@var[]..[]", "nodeName": "List.RestOfItems", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Revit.Elements.Level.ByElevationAndName@double,string": {"create": "Revit.Elements.Level.ByElevationAndName@double,string", "inputs": ["elevation", "name"], "outputs": ["Level"], "creationName": "Revit.Elements.Level.ByElevationAndName@double,string", "nodeName": "Level.ByElevationAndName", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Autodesk.DesignScript.Geometry.Point.Origin": {"create": "Autodesk.DesignScript.Geometry.Point.Origin", "inputs": [], "outputs": ["Point"], "creationName": "Autodesk.DesignScript.Geometry.Point.Origin", "nodeName": "Point.Origin", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double": {"create": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double", "inputs": ["geometry", "xTranslation", "yTranslation", "zTranslation"], "outputs": ["Geometry"], "creationName": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double", "nodeName": "Geometry.Translate", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point": {"create": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point", "inputs": ["startPoint", "endPoint"], "outputs": ["Line"], "creationName": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point", "nodeName": "Line.ByStartPointEndPoint", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line": {"create": "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line", "inputs": ["line"], "outputs": ["Grid"], "creationName": "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line", "nodeName": "Grid.ByLine", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "DSCore.List.MaximumItem@var[]": {"create": "DSCore.List.MaximumItem@var[]", "inputs": ["list"], "outputs": ["max"], "creationName": "DSCore.List.MaximumItem@var[]", "nodeName": "List.MaximumItem", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Revit.Elements.Element.SetParameterByName@string,var": {"create": "Revit.Elements.Element.SetParameterByName@string,var", "inputs": ["element", "parameterName", "value"], "outputs": ["Element"], "creationName": "Revit.Elements.Element.SetParameterByName@string,var", "nodeName": "Element.SetParameterByName", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "CoreNodeModels.FromObject": {"create": "CoreNodeModels.FromObject", "inputs": ["obj"], "outputs": ["str"], "nodeName": "String from Object", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "+@var[]..[],var[]..[]": {"create": "+@var[]..[],var[]..[]", "inputs": ["x", "y"], "outputs": ["var[]..[]"], "creationName": "+@var[]..[],var[]..[]", "nodeName": "+", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"}
+  },
+  "patterns": {
+    "表格匯出 Excel": "表頭 Code Block [\"欄1\",\"欄2\"] + 資料列 → List.AddItemToFront(item=表頭, list=資料列) → Data.ExportExcel(data)。多欄資料列可用 Code Block: DSCore.List.Transpose([a, b, c]);",
+    "依名稱關鍵字篩選元素": "Element.Name → String.Replace(正規化同義關鍵字) → String.Contains → List.FilterByBoolMask(list=元素, mask)",
+    "Python 多值輸出": "Python OUT = a, b, c → List.GetItemAtIndex(index=Code Block 0/1/2) 拆出",
+    "品類(下拉選單)→視圖中該品類的所有元件": {
+      "description": "使用者在 Categories 下拉選單選品類，取得作用中視圖內該品類的所有元件。",
+      "keywords": [
+        "品類",
+        "類別",
+        "視圖",
+        "作用中視圖",
+        "元件",
+        "元素",
+        "下拉",
+        "category",
+        "view",
+        "active view",
+        "elements in view"
+      ],
+      "nodes": [
+        {
+          "ref": "categories",
+          "name": "Categories",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "document_current",
+          "name": "Document.Current",
+          "x": 0,
+          "y": 200
+        },
+        {
+          "ref": "document_activeview",
+          "name": "Document.ActiveView",
+          "x": 250,
+          "y": 200
+        },
+        {
+          "ref": "all_elements_of_category_in_view",
+          "name": "All Elements of Category in View",
+          "x": 550,
+          "y": 80
+        },
+        {
+          "ref": "watch",
+          "name": "Watch",
+          "x": 900,
+          "y": 80
+        }
+      ],
+      "connectors": [
+        {
+          "from": "categories",
+          "fromPort": 0,
+          "to": "all_elements_of_category_in_view",
+          "toPort": 0
+        },
+        {
+          "from": "document_current",
+          "fromPort": 0,
+          "to": "document_activeview",
+          "toPort": 0
+        },
+        {
+          "from": "document_activeview",
+          "fromPort": 0,
+          "to": "all_elements_of_category_in_view",
+          "toPort": 1
+        },
+        {
+          "from": "all_elements_of_category_in_view",
+          "fromPort": 0,
+          "to": "watch",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "Categories 下拉選單無法用品類名稱設值；要由 AI 固定品類請用「品類(OST名稱)→視圖中該品類的所有元件」"
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    },
+    "品類(OST名稱)→視圖中該品類的所有元件": {
+      "description": "以 BuiltInCategory 名稱（例 OST_Walls、OST_Doors）指定品類，取得作用中視圖內該品類的所有元件。改 String 的 value 即可換品類。",
+      "keywords": [
+        "品類",
+        "類別",
+        "視圖",
+        "作用中視圖",
+        "元件",
+        "元素",
+        "OST",
+        "BuiltInCategory",
+        "category",
+        "view",
+        "active view",
+        "elements in view"
+      ],
+      "nodes": [
+        {
+          "ref": "corenodemodels_input_stringinput",
+          "name": "CoreNodeModels.Input.StringInput",
+          "value": "OST_Walls",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "category_byname",
+          "name": "Category.ByName",
+          "x": 250,
+          "y": 0
+        },
+        {
+          "ref": "document_current",
+          "name": "Document.Current",
+          "x": 0,
+          "y": 200
+        },
+        {
+          "ref": "document_activeview",
+          "name": "Document.ActiveView",
+          "x": 250,
+          "y": 200
+        },
+        {
+          "ref": "all_elements_of_category_in_view",
+          "name": "All Elements of Category in View",
+          "x": 550,
+          "y": 80
+        },
+        {
+          "ref": "watch",
+          "name": "Watch",
+          "x": 900,
+          "y": 80
+        }
+      ],
+      "connectors": [
+        {
+          "from": "corenodemodels_input_stringinput",
+          "fromPort": 0,
+          "to": "category_byname",
+          "toPort": 0
+        },
+        {
+          "from": "category_byname",
+          "fromPort": 0,
+          "to": "all_elements_of_category_in_view",
+          "toPort": 0
+        },
+        {
+          "from": "document_current",
+          "fromPort": 0,
+          "to": "document_activeview",
+          "toPort": 0
+        },
+        {
+          "from": "document_activeview",
+          "fromPort": 0,
+          "to": "all_elements_of_category_in_view",
+          "toPort": 1
+        },
+        {
+          "from": "all_elements_of_category_in_view",
+          "fromPort": 0,
+          "to": "watch",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "String 的 value 為 BuiltInCategory 名稱（OST_ 開頭），建立時即生效"
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    },
+    "選擇品類→所有元件→取參數值": {
+      "description": "選品類取得模型中所有元件，再用參數名稱取每個元件的參數值。",
+      "keywords": [
+        "品類",
+        "元件",
+        "參數",
+        "參數值",
+        "category",
+        "parameter",
+        "GetParameterValueByName"
+      ],
+      "nodes": [
+        {
+          "ref": "categories",
+          "name": "Categories",
+          "note": "由使用者在下拉選單選品類",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "all_elements_of_category",
+          "name": "All Elements of Category",
+          "x": 300,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_input_stringinput",
+          "name": "CoreNodeModels.Input.StringInput",
+          "x": 300,
+          "y": 200,
+          "value": "Mark"
+        },
+        {
+          "ref": "revit_elements_element_getparametervaluebyname_string",
+          "name": "Revit.Elements.Element.GetParameterValueByName@string",
+          "x": 650,
+          "y": 50
+        },
+        {
+          "ref": "watch",
+          "name": "Watch",
+          "x": 1000,
+          "y": 50
+        }
+      ],
+      "connectors": [
+        {
+          "from": "categories",
+          "fromPort": 0,
+          "to": "all_elements_of_category",
+          "toPort": 0
+        },
+        {
+          "from": "all_elements_of_category",
+          "fromPort": 0,
+          "to": "revit_elements_element_getparametervaluebyname_string",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_stringinput",
+          "fromPort": 0,
+          "to": "revit_elements_element_getparametervaluebyname_string",
+          "toPort": 1
+        },
+        {
+          "from": "revit_elements_element_getparametervaluebyname_string",
+          "fromPort": 0,
+          "to": "watch",
+          "toPort": 0
+        }
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)",
+      "gotchas": [
+        "String 的 value 為參數名稱（例 Mark、Comments），區分大小寫"
+      ]
+    },
+    "Excel 工作表 → 去表頭 → 轉置成欄": {
+      "description": "讀取 Excel 指定工作表，去掉第一列表頭並轉置，Code Block 依欄位輸出（L[0] 第 1 欄、L[1] 第 2 欄）。",
+      "keywords": [
+        "Excel",
+        "讀取",
+        "匯入",
+        "ImportExcel",
+        "工作表",
+        "表頭",
+        "轉置",
+        "欄",
+        "sheet",
+        "table"
+      ],
+      "nodes": [
+        {
+          "ref": "dsoffice_data_importexcel_var_string_bool_bool",
+          "name": "DSOffice.Data.ImportExcel@var,string,bool,bool",
+          "x": 835,
+          "y": 7
+        },
+        {
+          "ref": "corenodemodels_input_fileobject",
+          "name": "CoreNodeModels.Input.FileObject",
+          "x": 207,
+          "y": 59
+        },
+        {
+          "ref": "corenodemodels_input_filename",
+          "name": "CoreNodeModels.Input.Filename",
+          "value": ".\\Level&GridCreate.xlsx",
+          "x": 0,
+          "y": 56
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "\"LevelCreate\";",
+          "x": 579,
+          "y": 72
+        },
+        {
+          "ref": "dscore_list_transpose_var",
+          "name": "DSCore.List.Transpose@var[]..[]",
+          "x": 1282,
+          "y": 17
+        },
+        {
+          "ref": "dscore_list_restofitems_var",
+          "name": "DSCore.List.RestOfItems@var[]..[]",
+          "x": 1092,
+          "y": 14
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "L[0];\nL[1];",
+          "x": 1549,
+          "y": 0
+        }
+      ],
+      "connectors": [
+        {
+          "from": "dsoffice_data_importexcel_var_string_bool_bool",
+          "fromPort": 0,
+          "to": "dscore_list_restofitems_var",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_fileobject",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_filename",
+          "fromPort": 0,
+          "to": "corenodemodels_input_fileobject",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "code_block2",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_restofitems_var",
+          "fromPort": 0,
+          "to": "dscore_list_transpose_var",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "File Path 為相對路徑時，是相對於 .dyn 的位置；新圖請改成絕對路徑",
+        "Code Block 的 L[0]; L[1]; 依實際欄數增減",
+        "readAsStrings 預設 false：數字名稱會讀成 1.0 這類數值，要當文字用可接 true"
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    },
+    "Excel → 建立樓層（名稱 + 高程）": {
+      "description": "由 Excel 工作表（第 1 欄樓層名稱、第 2 欄高程）批次建立 Revit 樓層。",
+      "keywords": [
+        "樓層",
+        "建立樓層",
+        "標高",
+        "Level",
+        "高程",
+        "elevation",
+        "Excel",
+        "批次"
+      ],
+      "nodes": [
+        {
+          "ref": "revit_elements_level_byelevationandname_double_string",
+          "name": "Revit.Elements.Level.ByElevationAndName@double,string",
+          "x": 2072,
+          "y": 25
+        },
+        {
+          "ref": "dsoffice_data_importexcel_var_string_bool_bool",
+          "name": "DSOffice.Data.ImportExcel@var,string,bool,bool",
+          "x": 835,
+          "y": 7
+        },
+        {
+          "ref": "corenodemodels_input_fileobject",
+          "name": "CoreNodeModels.Input.FileObject",
+          "x": 207,
+          "y": 59
+        },
+        {
+          "ref": "corenodemodels_input_filename",
+          "name": "CoreNodeModels.Input.Filename",
+          "value": ".\\Level&GridCreate.xlsx",
+          "x": 0,
+          "y": 56
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "\"LevelCreate\";",
+          "x": 579,
+          "y": 72
+        },
+        {
+          "ref": "dscore_list_transpose_var",
+          "name": "DSCore.List.Transpose@var[]..[]",
+          "x": 1282,
+          "y": 17
+        },
+        {
+          "ref": "dscore_list_restofitems_var",
+          "name": "DSCore.List.RestOfItems@var[]..[]",
+          "x": 1092,
+          "y": 14
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "L[0];\nL[1];",
+          "x": 1549,
+          "y": 0
+        }
+      ],
+      "connectors": [
+        {
+          "from": "dsoffice_data_importexcel_var_string_bool_bool",
+          "fromPort": 0,
+          "to": "dscore_list_restofitems_var",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_fileobject",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_filename",
+          "fromPort": 0,
+          "to": "corenodemodels_input_fileobject",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "code_block2",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_restofitems_var",
+          "fromPort": 0,
+          "to": "dscore_list_transpose_var",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "revit_elements_level_byelevationandname_double_string",
+          "toPort": 1
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 1,
+          "to": "revit_elements_level_byelevationandname_double_string",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "高程單位為專案單位（mm）；同名樓層已存在會失敗",
+        "File Path 為相對路徑時，是相對於 .dyn 的位置"
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    },
+    "依偏移距離建立平行網格並命名": {
+      "description": "輸入表格（G[0] 網格名稱、G[2] 偏移距離），在原點建一條基準線，依偏移距離複製成多條網格並設定名稱。此版本沿 Y 偏移（線平行 X 軸）；要沿 X 偏移，把兩個 Translate 的 x/y 埠對調。",
+      "keywords": [
+        "網格",
+        "軸線",
+        "格線",
+        "Grid",
+        "建立網格",
+        "偏移",
+        "命名",
+        "Grid.ByLine"
+      ],
+      "nodes": [
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "G[0];\nG[2];",
+          "x": 0,
+          "y": 135
+        },
+        {
+          "ref": "autodesk_designscript_geometry_point_origin",
+          "name": "Autodesk.DesignScript.Geometry.Point.Origin",
+          "x": 314,
+          "y": 113
+        },
+        {
+          "ref": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "name": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double",
+          "x": 492,
+          "y": 203
+        },
+        {
+          "ref": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "name": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point",
+          "x": 783,
+          "y": 134
+        },
+        {
+          "ref": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "name": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double",
+          "x": 826,
+          "y": 421
+        },
+        {
+          "ref": "revit_elements_grid_byline_autodesk_designscript_geometry_line",
+          "name": "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line",
+          "x": 1255,
+          "y": 103
+        },
+        {
+          "ref": "dscore_list_maximumitem_var",
+          "name": "DSCore.List.MaximumItem@var[]",
+          "x": 96,
+          "y": 271
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "\"名稱\";",
+          "x": 1612,
+          "y": 35
+        },
+        {
+          "ref": "revit_elements_element_setparameterbyname_string_var",
+          "name": "Revit.Elements.Element.SetParameterByName@string,var",
+          "x": 1933,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_fromobject",
+          "name": "CoreNodeModels.FromObject",
+          "x": 1349,
+          "y": 394
+        },
+        {
+          "ref": "var_var",
+          "name": "+@var[]..[],var[]..[]",
+          "x": 293,
+          "y": 357
+        },
+        {
+          "ref": "code_block3",
+          "name": "Code Block",
+          "value": "100;",
+          "x": 95,
+          "y": 421
+        }
+      ],
+      "connectors": [
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "corenodemodels_fromobject",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 1,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "toPort": 2
+        },
+        {
+          "from": "autodesk_designscript_geometry_point_origin",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_point_origin",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "toPort": 1
+        },
+        {
+          "from": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "fromPort": 0,
+          "to": "revit_elements_grid_byline_autodesk_designscript_geometry_line",
+          "toPort": 0
+        },
+        {
+          "from": "revit_elements_grid_byline_autodesk_designscript_geometry_line",
+          "fromPort": 0,
+          "to": "revit_elements_element_setparameterbyname_string_var",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_maximumitem_var",
+          "fromPort": 0,
+          "to": "var_var",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "revit_elements_element_setparameterbyname_string_var",
+          "toPort": 1
+        },
+        {
+          "from": "corenodemodels_fromobject",
+          "fromPort": 0,
+          "to": "revit_elements_element_setparameterbyname_string_var",
+          "toPort": 2
+        },
+        {
+          "from": "var_var",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "toPort": 1
+        },
+        {
+          "from": "code_block3",
+          "fromPort": 0,
+          "to": "var_var",
+          "toPort": 1
+        }
+      ],
+      "gotchas": [
+        "基準線長度 = 另一方向最大偏移 + 100，原圖由另一組網格的偏移距離提供（模式外輸入）",
+        "名稱用 Element.SetParameterByName 設定參數「名稱」（中文版 Revit 參數名）",
+        "Excel 數字名稱讀成 1.0 時，原圖另一組以 String.Split('.') 取第一段",
+        "模式外輸入: List.MaximumItem[0] ← Code Block（模式外的節點）",
+        "模式外輸入: Code Block[0] ← List.Transpose（模式外的節點）"
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    }
+  }
+}

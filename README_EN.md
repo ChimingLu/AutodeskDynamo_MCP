@@ -126,7 +126,11 @@ This project provides an AI automation interface through **Model Context Protoco
 - `execute_dynamo_instructions` - Create nodes and connections
 - `analyze_workspace` - Analyze workspace state
 - `generate_workspace_mermaid` - Generate Mermaid flowcharts and Markdown logic reports for the current workspace
-- `search_nodes` - Search available nodes (formerly `list_available_nodes`)
+- `get_node_recipe` - Batch lookup of verified create names, port order and gotchas from the node registry (call before building a graph; works offline)
+- `get_node_pattern` - Look up remembered node connection patterns (with connectors) and get ready-to-execute JSON
+- `save_node_pattern` - Save a successfully built set of nodes + connectors as a reusable pattern (verified against the workspace)
+- `capture_node_pattern` - Capture the nodes + connectors selected in Dynamo as a pattern (values read from the saved .dyn)
+- `search_nodes` - Search available nodes; returns the `create` name that actually creates the node (formerly `list_available_nodes`)
 - `run_autotest` - Execute automated tests
 - `get_script_library` - Get script library list
 - `clear_workspace` - Clear workspace
@@ -242,7 +246,9 @@ Get-ChildItem "$env:AppData\Dynamo\Dynamo Revit" -Directory
 | `clear_workspace` | **[NEW]** One-click workspace clearing | Redesign or redrawing |
 | `analyze_workspace` | Query current node status and errors | Debugging and status checking |
 | `generate_workspace_mermaid` | Convert the current workspace into Mermaid and Markdown analysis | Script review, `/image`, logic explanation |
-| `search_nodes` | Search available Dynamo nodes (including .dyf) | Find modeling tools |
+| `get_node_recipe` | Look up verified node create names, ports and gotchas (offline) | Before building any graph |
+| `get_node_pattern` / `save_node_pattern` | Reuse / remember verified node connection patterns | Common chains, e.g. category → elements in view |
+| `search_nodes` | Search available Dynamo nodes (including .dyf) | Nodes missing from the registry |
 | `get_script_library` | Get list of available scripts | Modular reuse |
 
 > [!TIP]
