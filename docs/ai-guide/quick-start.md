@@ -30,9 +30,20 @@ This guide helps AI agents efficiently automate Autodesk Dynamo through the Mode
 2. **Available MCP Tools**
    - `execute_dynamo_instructions` - Create nodes and connections
    - `analyze_workspace` - Get workspace state
-   - `search_nodes` - Search available nodes
+   - `search_nodes` - Search available nodes (use only for nodes missing from the registry; use its `create` field)
+   - `get_node_recipe` - Verified create names, port order and gotchas for a batch of nodes (offline)
+   - `get_node_pattern` - Remembered node connection patterns as ready-to-execute JSON (offline)
+   - `save_node_pattern` - Save nodes + connectors you just executed as a reusable pattern
+   - `capture_node_pattern` - Save nodes + connectors the user selected in Dynamo as a pattern
    - `get_script_library` - Get script library list
    - `clear_workspace` - Clear current workspace
+
+3. **Node Registry & Connection Patterns (all agents share `domain/node_registry.json`)**
+   - Before building: `get_node_pattern(query="<need, any language>")` for common chains, then `get_node_recipe(names=[...])` for every node; `search_nodes` only for misses.
+   - Use GUID node ids — successful executes auto-learn new nodes; wrong names are recorded in `badNames`.
+   - After building something reusable: `save_node_pattern(name, instructions=<same JSON you executed>, description, keywords)`.
+   - User built it by hand in a `.dyn`: ask them to save and select the nodes, then `capture_node_pattern(name, description, keywords)` (values are read from the saved `.dyn`).
+   - Saved/captured patterns are verified by `python tests/verify_node_registry_live.py` in an empty workspace (Manual run mode).
 
 ---
 

@@ -91,7 +91,10 @@ All tools are exposed via `server.py` and bridged through Node.js:
 | `execute_dynamo_instructions` | Place nodes & connectors | `instructions` (JSON string with `nodes`/`connectors`) |
 | `analyze_workspace` | Query current graph state | None - returns node list, errors, status |
 | `clear_workspace` | Wipe canvas | None - use `clear_before_execute=true` to avoid overlaps |
-| `search_nodes` | Find available nodes | `query` (e.g., "Room", "Solid") |
+| `get_node_pattern` | **Call first** for common node chains; returns ready-to-execute JSON | `query` (e.g., "品類 視圖 元件") |
+| `get_node_recipe` | **Call before building** — verified create names, ports, gotchas | `names` (list) |
+| `search_nodes` | Find nodes missing from the registry (use the `create` field) | `query` (e.g., "Room", "Solid") |
+| `save_node_pattern` / `capture_node_pattern` | Remember a working node chain (from executed JSON / from the user's selection in Dynamo) | `name`, `instructions` or selection |
 | `get_mcp_guidelines` | Retrieve [GEMINI.md](../GEMINI.md) content | None - returns full spec |
 
 ## Developer Workflows
