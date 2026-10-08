@@ -127,6 +127,8 @@ This project provides an AI automation interface through **Model Context Protoco
 - `analyze_workspace` - Analyze workspace state
 - `generate_workspace_mermaid` - Generate Mermaid flowcharts and Markdown logic reports for the current workspace
 - `get_node_recipe` - Batch lookup of verified create names, port order and gotchas from the node registry (call before building a graph; works offline)
+- `get_node_pattern` - Look up remembered node connection patterns (with connectors) and get ready-to-execute JSON
+- `save_node_pattern` - Save a successfully built set of nodes + connectors as a reusable pattern (verified against the workspace)
 - `search_nodes` - Search available nodes; returns the `create` name that actually creates the node (formerly `list_available_nodes`)
 - `run_autotest` - Execute automated tests
 - `get_script_library` - Get script library list
@@ -244,6 +246,7 @@ Get-ChildItem "$env:AppData\Dynamo\Dynamo Revit" -Directory
 | `analyze_workspace` | Query current node status and errors | Debugging and status checking |
 | `generate_workspace_mermaid` | Convert the current workspace into Mermaid and Markdown analysis | Script review, `/image`, logic explanation |
 | `get_node_recipe` | Look up verified node create names, ports and gotchas (offline) | Before building any graph |
+| `get_node_pattern` / `save_node_pattern` | Reuse / remember verified node connection patterns | Common chains, e.g. category → elements in view |
 | `search_nodes` | Search available Dynamo nodes (including .dyf) | Nodes missing from the registry |
 | `get_script_library` | Get list of available scripts | Modular reuse |
 

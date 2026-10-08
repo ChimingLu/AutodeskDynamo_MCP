@@ -140,6 +140,21 @@ async def main(args):
                     row.update(result="FAIL", reason="badName 竟建出與 create 相同的節點，可從 badNames 移除")
                 results.append(row)
 
+        # 3) 連接模式：實例化（新 GUID）→ 執行 → 確認全部節點與連線都在工作區
+        pattern_rows = 0
+        for name, pattern in reg.get("patterns", {}).items():
+            if not node_registry.is_structured_pattern(pattern):
+                continue
+            inst = node_registry.instantiate_pattern(pattern, base_x=-2600, base_y=pattern_rows * 700)["instructions"]
+            pattern_rows += 1
+            await bridge.call("execute_dynamo_instructions", instructions=json.dumps(inst),
+                              allow_fallback=False, clientId="registry-verify")
+            status = await bridge.call("get_graph_status")
+            problems = node_registry.check_pattern_in_graph(inst, status.get("nodes"), status.get("connectors"))
+            results.append({"name": name, "pattern": True, "result": "FAIL" if problems else "PASS",
+                            "reason": "; ".join(problems) or
+                            f"{len(inst['nodes'])} 節點 / {len(inst['connectors'])} 連線全部建立"})
+
         if args.keep:
             # 分組方便目視：正確 create vs. badNames 錯誤示範
             ok_ids = [g for g in good if g in after]
@@ -157,7 +172,10 @@ async def main(args):
 
     passed = sum(r["result"] == "PASS" for r in results)
     for r in results:
-        label = f"{r['name']}" + (f"  [badName: {r['badName']}]" if "badName" in r else f"  -> {r['create']}")
+        if r.get("pattern"):
+            label = f"[模式] {r['name']}"
+        else:
+            label = f"{r['name']}" + (f"  [badName: {r['badName']}]" if "badName" in r else f"  -> {r['create']}")
         detail = r.get("reason") or f"in={r.get('inputs')} out={r.get('outputs')}"
         print(f"[{r['result']}] {label}  {detail}")
     print(f"\n{passed}/{len(results)} PASS  (報告: {os.path.relpath(REPORT_PATH, ROOT)})")

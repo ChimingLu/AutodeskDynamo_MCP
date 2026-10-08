@@ -1422,6 +1422,36 @@ class MCPBridgeServer:
                 "readOnlyHint": True
             },
             {
+                "name": "get_node_pattern",
+                "description": "查詢已記住的節點連接模式（例：選擇品類→視圖中該品類的所有元件），回傳含節點與連線、每次新 GUID、可直接傳給 execute_dynamo_instructions 的 JSON。可用中文描述或關鍵字搜尋；query 留空則列出全部模式。離線可用。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "模式名稱、關鍵字或需求描述（例：'品類 視圖 元件'）。留空列出全部。"},
+                        "baseX": {"type": "number", "description": "放置位置 X 偏移，預設 0"},
+                        "baseY": {"type": "number", "description": "放置位置 Y 偏移，預設 0"}
+                    }
+                },
+                "readOnlyHint": True
+            },
+            {
+                "name": "save_node_pattern",
+                "description": "把剛成功建立的一組節點+連線存成可重用的連接模式。instructions 用剛送給 execute_dynamo_instructions 的同一份 JSON（節點 id 需為 GUID）；若 Dynamo 已連線，會先確認這些節點與連線確實存在於工作區，全部存在才標記為 verified。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "模式名稱（例：'品類→視圖中所有元件'）"},
+                        "instructions": {"type": "string", "description": "剛執行成功的 JSON（含 nodes 與 connectors）"},
+                        "description": {"type": "string", "description": "這個模式做什麼、何時使用"},
+                        "keywords": {"type": "array", "items": {"type": "string"}, "description": "搜尋關鍵字（中英文皆可）"},
+                        "gotchas": {"type": "array", "items": {"type": "string"}, "description": "已知陷阱"},
+                        "overwrite": {"type": "boolean", "description": "同名模式已存在時是否覆寫，預設 false"}
+                    },
+                    "required": ["name", "instructions"]
+                },
+                "readOnlyHint": False
+            },
+            {
                 "name": "search_nodes",
                 "description": "在 Dynamo 庫中搜尋節點（先用 get_node_recipe，查不到的再用這個）。每個結果的 create 欄位即可傳給 execute_dynamo_instructions 的 name；不要使用 fullName。",
                 "inputSchema": {
@@ -1691,6 +1721,10 @@ class MCPBridgeServer:
                 return await search_nodes_async(**args)
             elif name == "get_node_recipe":
                 return get_node_recipe(**args)
+            elif name == "get_node_pattern":
+                return get_node_pattern(**args)
+            elif name == "save_node_pattern":
+                return await save_node_pattern(**args)
             elif name == "analyze_workspace":
                 return await analyze_workspace()
             elif name == "get_graph_status":
@@ -2219,10 +2253,14 @@ async def search_nodes_async(query: str) -> str:
         ]
         for n in nodes:
             create, source = node_registry.resolve_create_name(
-                n.get("name", ""), n.get("fullName", ""), n.get("creationName", ""), registry, registry_index
+                n.get("name", ""), n.get("fullName", ""), n.get("creationName", ""), registry, registry_index,
+                n.get("type", "")
             )
             res.append(f"- **{n.get('name', '')}**")
-            res.append(f"  create: `{create}`" + ("  [registry]" if source == "registry" else ""))
+            if source == "ambiguous":
+                res.append(f"  create: [WARNING] `{create}` 會建出其他同名節點（見 get_node_recipe），目前沒有已知可建立的名稱")
+            else:
+                res.append(f"  create: `{create}`" + ("  [registry]" if source == "registry" else ""))
             if n.get("creationName") and n["creationName"] not in (create, n.get("fullName")):
                 res.append(f"  creationName: `{n['creationName']}`")
             if n.get('description'): res.append(f"  說明: {n['description']}")
@@ -2315,6 +2353,43 @@ def get_node_recipe(names: list = None, includeRules: bool = True) -> str:
     except Exception as e:
         return f"[FAIL] 讀取 node_registry.json 失敗: {e}"
     return node_registry.format_recipes(result)
+
+def get_node_pattern(query: str = "", baseX: float = 0, baseY: float = 0) -> str:
+    try:
+        matches = node_registry.search_patterns(query or "")
+    except Exception as e:
+        return f"[FAIL] 讀取 node_registry.json 失敗: {e}"
+    if not query:
+        lines = ["[PATTERN] 全部連接模式（用 get_node_pattern(query=名稱) 取得可執行 JSON）:"]
+        for name, pattern, _ in matches:
+            desc = pattern.get("description", "") if isinstance(pattern, dict) else pattern
+            lines.append(f"- {name}: {desc}")
+        return "\n".join(lines)
+    return node_registry.format_patterns(matches, float(baseX or 0), float(baseY or 0))
+
+async def save_node_pattern(name: str, instructions: str, description: str = "", keywords: list = None,
+                            gotchas: list = None, overwrite: bool = False, sessionId: str = None) -> str:
+    try:
+        data = json.loads(instructions) if isinstance(instructions, str) else instructions
+    except json.JSONDecodeError as e:
+        return json.dumps({"status": "error", "message": f"JSON 解析錯誤: {e}"}, ensure_ascii=False)
+    if isinstance(data, list):
+        data = {"nodes": data, "connectors": []}
+
+    # 對照目前工作區：節點與連線都在才算 verified
+    problems, version = None, None
+    with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
+    if sessions:
+        session_id = sessionId if sessionId in sessions else sessions[-1]
+        status = await _safe_send(session_id, {"action": "get_graph_status"})
+        if status is not None:
+            problems = node_registry.check_pattern_in_graph(data, status.get("nodes") or [], status.get("connectors") or [])
+            version = CONFIG.get("node_registry", {}).get("dynamo_version") \
+                or node_registry.detect_dynamo_version(status.get("processId"))
+    result = node_registry.save_pattern(name, data, description, keywords, gotchas, problems, version, overwrite)
+    if result.get("status") == "ok" and problems is None:
+        result["note"] = "Dynamo 未連線，無法對照工作區，模式標記為 unverified"
+    return json.dumps(result, ensure_ascii=False)
 
 def get_mcp_guidelines() -> str:
     g, q = _load_guidelines()

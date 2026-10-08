@@ -173,5 +173,89 @@ class AutoLearnTest(unittest.TestCase):
         self.assertEqual([n for n in os.listdir(self.tmp) if n.endswith(".tmp")], [])
 
 
+class AmbiguityAndSearchTest(unittest.TestCase):
+    def test_same_name_resolution_is_not_learned(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            path = os.path.join(tmp, "r.json")
+            shutil.copy(SEED, path)
+            report = node_registry.learn_from_execution(
+                [{"id": G1, "name": "Sheets"}], set(),
+                [{"id": G1, "name": "Sheet.Sheets", "creationName": "Revit.Elements.Views.Sheet.Sheets"}], [], path=path)
+            self.assertEqual(report["learned"], [])
+            self.assertEqual(report["ambiguous"][0]["name"], "Sheets")
+            entry = node_registry.load_registry(path)["nodes"]["Sheets"]
+            self.assertIsNone(entry["create"])
+            self.assertIn("Sheet.Sheets", entry["gotchas"][0])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_name_matches_node(self):
+        m = node_registry.name_matches_node
+        self.assertTrue(m("List.Count", {"name": "List.Count", "creationName": "DSCore.List.Count@var[]..[]"}))
+        self.assertTrue(m("Revit.Elements.Room.Name", {"name": "Room.Name"}))
+        self.assertTrue(m("CoreNodeModels.Input.StringInput", {"name": "String", "fullName": "CoreNodeModels.Input.StringInput"}))
+        self.assertFalse(m("String", {"name": "FloatFormatHandling.String",
+                                      "creationName": "Newtonsoft.Json.FloatFormatHandling.String"}))
+        self.assertFalse(m("Views", {"name": "Sheet.Views", "creationName": "Revit.Elements.Views.Sheet.Views"}))
+
+    def test_ui_nodes_use_display_name_in_search(self):
+        reg = node_registry.load_registry(SEED)
+        r = node_registry.resolve_create_name
+        self.assertEqual(r("All Elements of Category in View", "Selection.All Elements of Category in View",
+                           "Selection.All Elements of Category in View", reg, element_type="NodeModelSearchElement")[0],
+                         "All Elements of Category in View")
+        self.assertEqual(r("Views", "Selection.Views", "Selection.Views", reg, element_type="NodeModelSearchElement"),
+                         ("DSRevitNodesUI.Views", "registry"))
+
+
+class PatternTest(unittest.TestCase):
+    QUERY = "選擇品類，取得視圖中該品類的所有元件"
+
+    def test_chinese_query_finds_category_in_view_patterns(self):
+        names = [m[0] for m in node_registry.search_patterns(self.QUERY, path=SEED)]
+        self.assertTrue(any("視圖中該品類的所有元件" in n for n in names))
+
+    def test_instantiate_uses_fresh_guids_and_maps_connectors(self):
+        name, pattern, _ = node_registry.search_patterns(self.QUERY, path=SEED)[0]
+        a = node_registry.instantiate_pattern(pattern, 100, 50)
+        b = node_registry.instantiate_pattern(pattern)
+        ids = {n["id"] for n in a["instructions"]["nodes"]}
+        self.assertTrue(all(node_registry.is_guid(i) for i in ids))
+        self.assertFalse(ids & {n["id"] for n in b["instructions"]["nodes"]})
+        self.assertEqual(len(a["instructions"]["connectors"]), len(pattern["connectors"]))
+        for c in a["instructions"]["connectors"]:
+            self.assertIn(c["from"], ids)
+            self.assertIn(c["to"], ids)
+        self.assertEqual(min(n["x"] for n in a["instructions"]["nodes"]), 100)
+
+    def test_save_roundtrip_and_graph_check(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            path = os.path.join(tmp, "r.json")
+            shutil.copy(SEED, path)
+            inst = {"nodes": [{"id": G1, "name": "Document.Current", "x": 500, "y": 300},
+                              {"id": G2, "name": "Document.ActiveView", "x": 750, "y": 300}],
+                    "connectors": [{"from": G1, "fromPort": 0, "to": G2, "toPort": 0}]}
+            graph_nodes = [{"id": G1}, {"id": G2}]
+            self.assertEqual(node_registry.check_pattern_in_graph(inst, graph_nodes, []),
+                             [f"連線不在工作區: {G1}[0] → {G2}[0]"])
+            problems = node_registry.check_pattern_in_graph(
+                inst, graph_nodes, [{"from": G1, "fromPort": 0, "to": G2, "toPort": 0}])
+            res = node_registry.save_pattern("目前視圖", inst, "取得作用中視圖", ["視圖"], problems=problems,
+                                             dynamo_version="Dynamo 2.6", path=path)
+            self.assertEqual(res["patternStatus"], "verified")
+            saved = node_registry.load_registry(path)["patterns"]["目前視圖"]
+            self.assertEqual([n["x"] for n in saved["nodes"]], [0, 250])
+            self.assertEqual(saved["connectors"], [{"from": "document_current", "fromPort": 0,
+                                                    "to": "document_activeview", "toPort": 0}])
+            self.assertEqual(node_registry.save_pattern("目前視圖", inst, path=path)["status"], "error")
+            # get_node_recipe 會列出用到這些節點的模式
+            res = node_registry.lookup_recipes(["Document.ActiveView"], path=path)
+            self.assertIn("目前視圖", res["relatedPatterns"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -173,6 +173,7 @@ def lookup_recipes(names: List[str], path: str = None, include_rules: bool = Tru
         "found": found,
         "missing": missing,
         "patterns": patterns,
+        "relatedPatterns": patterns_using(reg, [f["name"] for f in found]),
     }
 
 
@@ -210,7 +211,16 @@ def format_recipes(result: dict) -> str:
         lines.append(f"verified: {verified} [{status}{extra}]")
 
     for p in result["patterns"]:
-        lines.append(f"\n## 模式: {p['name']}\n{p['pattern']}")
+        body = p["pattern"]
+        if is_structured_pattern(body):
+            body = (body.get("description") or "") + f"\n（結構化連接模式：用 get_node_pattern(\"{p['name']}\") 取得可直接執行的 JSON）"
+        lines.append(f"\n## 模式: {p['name']}\n{body}")
+
+    shown = {p["name"] for p in result["patterns"]}
+    related = [r for r in result.get("relatedPatterns") or [] if r not in shown]
+    if related:
+        lines.append("\n## 相關連接模式（get_node_pattern 可直接取得含連線的 JSON）")
+        lines.extend(f"- {r}" for r in related)
 
     if missing:
         lines.append("\n## 不在 registry（請對這些名稱使用 search_nodes，並使用其 create 欄位）")
@@ -221,8 +231,11 @@ def format_recipes(result: dict) -> str:
     return "\n".join(lines)
 
 
-def resolve_create_name(name: str, full_name: str, creation_name: str, reg: dict = None, index: dict = None) -> tuple:
-    """search_nodes 用：回傳 (可建立的名稱, 來源)。fullName 本身無法用於 CreateNodeCommand。"""
+def resolve_create_name(name: str, full_name: str, creation_name: str, reg: dict = None, index: dict = None,
+                        element_type: str = "") -> tuple:
+    """search_nodes 用：回傳 (可建立的名稱, 來源)。fullName 本身無法用於 CreateNodeCommand。
+    element_type 為 C# list_nodes 的 type（例：NodeModelSearchElement）；UI 節點只能用顯示名稱建立
+    （Dynamo 2.6 實測：'Categories' 可建立，'Selection.Categories' 不行）。"""
     reg = reg if reg is not None else load_registry()
     index = index if index is not None else build_index(reg)
     for candidate in (creation_name, full_name):
@@ -233,8 +246,17 @@ def resolve_create_name(name: str, full_name: str, creation_name: str, reg: dict
             entry = reg["nodes"][hit[0]]
             if entry.get("create"):
                 return entry["create"], "registry"
+    is_ui_node = "nodemodel" in (element_type or "").lower()
+    if is_ui_node and name:
+        hit = _find(reg, index, name)
+        if hit and hit[1] != "badName":
+            if reg["nodes"][hit[0]].get("create"):
+                return reg["nodes"][hit[0]]["create"], "registry"
+            return name, "ambiguous"  # 已知此顯示名稱會建出別的節點
     if creation_name and creation_name != full_name:
         return creation_name, "creationName"
+    if is_ui_node and name:
+        return name, "name"
     segs = [s for s in (full_name or "").split("@", 1)[0].split(".") if s]
     if len(segs) >= 2:
         return ".".join(segs[-2:]), "short"
@@ -280,6 +302,26 @@ def parse_failed_creations(errors) -> Dict[str, str]:
     return failed
 
 
+def _strip_sig(text) -> str:
+    return _norm(text).split("@", 1)[0]
+
+
+def name_matches_node(requested: str, graph_node: dict) -> bool:
+    """建出的節點是否真的是要求的那個（排除 'String' 建出 FloatFormatHandling.String、'Views' 建出 Sheet.Views 這類同名誤判）。"""
+    r = _strip_sig(requested)
+    if not r or is_guid(requested):
+        return True
+    display = _strip_sig(graph_node.get("name"))
+    exact = {display, _strip_sig(graph_node.get("creationName")), _strip_sig(graph_node.get("fullName"))}
+    if r in exact:
+        return True
+    if display and r.endswith("." + display):  # Revit.Elements.Room.Name -> Room.Name
+        return True
+    creation = _strip_sig(graph_node.get("creationName"))
+    # 帶命名空間的短名（List.Count -> DSCore.List.Count）；單字名稱太模糊，不接受後綴比對
+    return "." in r and bool(creation) and creation.endswith("." + r)
+
+
 def learn_from_execution(
     instr_nodes: list,
     pre_existing_ids: set,
@@ -305,7 +347,7 @@ def learn_from_execution(
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     version = dynamo_version or "unknown"
 
-    learned, bad, skipped = [], [], []
+    learned, bad, skipped, ambiguous = [], [], [], []
 
     with _write_lock:
         reg = load_registry(path)
@@ -349,6 +391,25 @@ def learn_from_execution(
                     skipped.append({"name": name, "reason": "registry create 名稱本次建立失敗（未修改，請檢查）"})
                 continue
 
+            # 建出來的不是同名節點（同名誤判）：視同錯誤名稱
+            g = graph.get(nid, {})
+            if not name_matches_node(name, g):
+                resolved = g.get("creationName") or g.get("name") or g.get("fullName")
+                note = f"此名稱會建出 {g.get('name')}（{resolved}），不是預期的同名節點"
+                if entry is None or (entry.get("status") in _AUTO_STATUSES and _norm(entry.get("create")) == _norm(name)):
+                    nodes[key or name] = {
+                        "create": None, "badNames": [name], "gotchas": [note], "resolvedTo": resolved,
+                        "status": AUTO_FAILED_STATUS, "verified": f"{version} ({now})",
+                    }
+                    changed = True
+                elif _norm(name) != _norm(entry.get("create")):
+                    lst = entry.setdefault("badNames", [])
+                    if _norm(name) not in {_norm(b) for b in lst}:
+                        lst.append(name)
+                        changed = True
+                ambiguous.append({"name": name, "createdInstead": resolved})
+                continue
+
             # 建立成功
             if matched_by == "badName":
                 skipped.append({"name": name, "reason": f"屬於 {key} 的 badNames，建出的節點可能不是預期的"})
@@ -384,7 +445,191 @@ def learn_from_execution(
         if changed:
             save_registry(reg, path)
 
-    return {"learned": learned, "badNames": bad, "skipped": skipped}
+    return {"learned": learned, "badNames": bad, "ambiguous": ambiguous, "skipped": skipped}
+
+
+# ------------------------------------------
+# 連接模式（patterns）：常用的節點組合 + 連線，可直接實例化成 execute_dynamo_instructions JSON
+# ------------------------------------------
+# 結構化模式格式：
+#   "名稱": {"description", "keywords": [], "nodes": [{"ref", "name", "value"?, "x", "y", ...}],
+#            "connectors": [{"from": ref, "fromPort", "to": ref, "toPort"}], "gotchas": [], "status", "verified"}
+# 舊的文字模式（"名稱": "說明文字"）仍相容，只回傳說明。
+
+_PATTERN_NODE_DROP = {"id", "x", "y", "_strategy"}
+
+
+def is_structured_pattern(pattern) -> bool:
+    return isinstance(pattern, dict) and isinstance(pattern.get("nodes"), list)
+
+
+def search_patterns(query: str, path: str = None, reg: dict = None, limit: int = 3) -> List[tuple]:
+    """依名稱/關鍵字/節點名稱打分，回傳 [(name, pattern, score)]。query 可為中文句子。"""
+    reg = reg if reg is not None else load_registry(path)
+    q = _norm(query)
+    scored = []
+    for name, pattern in reg.get("patterns", {}).items():
+        n = _norm(name)
+        score = 0
+        if not q:
+            score = 1
+        elif q == n:
+            score = 100
+        elif q in n or n in q:
+            score = 60
+        if q and isinstance(pattern, dict):
+            for kw in pattern.get("keywords") or []:
+                k = _norm(kw)
+                if k and (k in q or q in k):
+                    score += 10
+            for node in pattern.get("nodes") or []:
+                nn = _norm(node.get("name"))
+                if nn and len(nn) > 3 and (nn in q or q in nn):
+                    score += 5
+        elif q and isinstance(pattern, str) and q in _norm(pattern):
+            score += 5
+        if score:
+            scored.append((name, pattern, score))
+    scored.sort(key=lambda t: -t[2])
+    return scored if not q else scored[:limit]
+
+
+def instantiate_pattern(pattern: dict, base_x: float = 0, base_y: float = 0, id_factory=None) -> dict:
+    """產生可直接送 execute_dynamo_instructions 的 JSON（每次新 GUID）。回傳 {"instructions", "ids": {ref: guid}}。"""
+    import uuid
+    id_factory = id_factory or (lambda: str(uuid.uuid4()))
+    ids = {}
+    nodes = []
+    for node in pattern.get("nodes") or []:
+        ref = node["ref"]
+        ids[ref] = id_factory()
+        out = {"id": ids[ref]}
+        out.update({k: v for k, v in node.items() if k not in ("ref", "x", "y", "note")})
+        out["x"] = float(node.get("x", 0)) + base_x
+        out["y"] = float(node.get("y", 0)) + base_y
+        nodes.append(out)
+    connectors = []
+    for c in pattern.get("connectors") or []:
+        if c.get("from") in ids and c.get("to") in ids:
+            connectors.append({"from": ids[c["from"]], "fromPort": c.get("fromPort", 0),
+                               "to": ids[c["to"]], "toPort": c.get("toPort", 0)})
+    return {"instructions": {"nodes": nodes, "connectors": connectors}, "ids": ids}
+
+
+def format_patterns(matches: List[tuple], base_x: float = 0, base_y: float = 0) -> str:
+    if not matches:
+        return "[PATTERN] 找不到符合的連接模式。可用 get_node_recipe 查節點，建好後用 save_node_pattern 存成模式。"
+    lines = [f"[PATTERN] 找到 {len(matches)} 個連接模式"]
+    for name, pattern, _ in matches:
+        lines.append(f"\n## {name}")
+        if not is_structured_pattern(pattern):
+            lines.append(pattern if isinstance(pattern, str) else json.dumps(pattern, ensure_ascii=False))
+            continue
+        if pattern.get("description"):
+            lines.append(pattern["description"])
+        refs = {n["ref"]: n for n in pattern["nodes"]}
+        for c in pattern.get("connectors") or []:
+            a, b = refs.get(c["from"], {}), refs.get(c["to"], {})
+            lines.append(f"- {a.get('name')}[{c.get('fromPort', 0)}] → {b.get('name')}[{c.get('toPort', 0)}]")
+        for n in pattern["nodes"]:
+            if n.get("note"):
+                lines.append(f"- 註 {n['name']}: {n['note']}")
+        for g in pattern.get("gotchas") or []:
+            lines.append(f"- 陷阱: {g}")
+        lines.append(f"verified: {pattern.get('verified', '?')} [{pattern.get('status', 'manual')}]")
+        inst = instantiate_pattern(pattern, base_x, base_y)
+        lines.append("instructions（新 GUID，可直接傳給 execute_dynamo_instructions；ids 可用來接其他節點）:")
+        lines.append(json.dumps(inst["instructions"], ensure_ascii=False))
+        lines.append("ids: " + json.dumps(inst["ids"], ensure_ascii=False))
+    return "\n".join(lines)
+
+
+def patterns_using(reg: dict, node_keys: List[str]) -> List[str]:
+    """哪些結構化模式用到這些節點（以 registry key 或 create 比對）。"""
+    wanted = set()
+    for k in node_keys:
+        wanted.add(_norm(k))
+        entry = reg.get("nodes", {}).get(k) or {}
+        if entry.get("create"):
+            wanted.add(_norm(entry["create"]))
+    hits = []
+    for name, pattern in reg.get("patterns", {}).items():
+        if is_structured_pattern(pattern) and any(_norm(n.get("name")) in wanted for n in pattern["nodes"]):
+            hits.append(name)
+    return hits
+
+
+def _ref_for(name: str, used: set) -> str:
+    base = re.sub(r"[^0-9a-zA-Z]+", "_", str(name or "node")).strip("_").lower() or "node"
+    ref, i = base, 2
+    while ref in used:
+        ref, i = f"{base}{i}", i + 1
+    used.add(ref)
+    return ref
+
+
+def check_pattern_in_graph(instructions: dict, graph_nodes: list, graph_connectors: list) -> List[str]:
+    """確認 instructions 中的節點與連線確實存在於目前工作區；回傳問題清單（空 = 已驗證）。"""
+    problems = []
+    present = {str(n.get("id", "")).lower() for n in graph_nodes or []}
+    for n in instructions.get("nodes", []):
+        if str(n.get("id", "")).lower() not in present:
+            problems.append(f"節點不在工作區: {n.get('name')} ({n.get('id')})")
+    have = {(str(c.get("from", "")).lower(), int(c.get("fromPort", 0)), str(c.get("to", "")).lower(), int(c.get("toPort", 0)))
+            for c in graph_connectors or []}
+    for c in instructions.get("connectors", []):
+        key = (str(c.get("from", "")).lower(), int(c.get("fromPort", 0)), str(c.get("to", "")).lower(), int(c.get("toPort", 0)))
+        if key not in have:
+            problems.append(f"連線不在工作區: {c.get('from')}[{key[1]}] → {c.get('to')}[{key[3]}]")
+    return problems
+
+
+def save_pattern(name: str, instructions: dict, description: str = "", keywords: List[str] = None,
+                 gotchas: List[str] = None, problems: Optional[List[str]] = None, dynamo_version: str = None,
+                 overwrite: bool = False, path: str = None) -> dict:
+    """
+    把一組已建好的 nodes/connectors 存成模式。problems=None 表示未對照工作區（status unverified），
+    [] 表示已在工作區確認全部節點與連線存在（status verified）。
+    """
+    nodes_in = instructions.get("nodes") or []
+    if not name or not nodes_in:
+        return {"status": "error", "message": "需要 name 與至少一個節點"}
+    min_x = min(float(n.get("x", 0)) for n in nodes_in)
+    min_y = min(float(n.get("y", 0)) for n in nodes_in)
+    used, ref_of, nodes = set(), {}, []
+    for n in nodes_in:
+        ref = _ref_for(n.get("name"), used)
+        ref_of[str(n.get("id"))] = ref
+        node = {"ref": ref}
+        node.update({k: v for k, v in n.items() if k not in _PATTERN_NODE_DROP})
+        node["x"] = round(float(n.get("x", 0)) - min_x)
+        node["y"] = round(float(n.get("y", 0)) - min_y)
+        nodes.append(node)
+    connectors = []
+    for c in instructions.get("connectors") or []:
+        if str(c.get("from")) in ref_of and str(c.get("to")) in ref_of:
+            connectors.append({"from": ref_of[str(c["from"])], "fromPort": int(c.get("fromPort", 0)),
+                               "to": ref_of[str(c["to"])], "toPort": int(c.get("toPort", 0))})
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    pattern = {
+        "description": description,
+        "keywords": list(keywords or []),
+        "nodes": nodes,
+        "connectors": connectors,
+        "gotchas": list(gotchas or []),
+        "status": "verified" if problems == [] else "unverified",
+        "verified": f"{dynamo_version or 'unknown'} ({now})" if problems == [] else None,
+    }
+    pattern = {k: v for k, v in pattern.items() if v not in (None, "", [])}
+    with _write_lock:
+        reg = load_registry(path)
+        existing = reg["patterns"].get(name)
+        if existing is not None and not overwrite:
+            return {"status": "error", "message": f"模式「{name}」已存在；要覆寫請設 overwrite=true"}
+        reg["patterns"][name] = pattern
+        save_registry(reg, path)
+    return {"status": "ok", "name": name, "patternStatus": pattern["status"], "problems": problems or [],
+            "nodes": len(nodes), "connectors": len(connectors)}
 
 
 # ------------------------------------------
