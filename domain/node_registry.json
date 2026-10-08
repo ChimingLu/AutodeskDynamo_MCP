@@ -59,7 +59,8 @@
     "Categories": {"create": "Categories", "inputs": [], "outputs": ["Category"], "nodeName": "Categories", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)", "badNames": ["Selection.Categories"], "value": "下拉選單只能用索引設值（value: \"5\"），且需同 GUID 第二次送出才生效；索引對應的品類依 Revit 語系而異", "gotchas": ["要由 AI 固定品類，請改用 String(\"OST_Walls\") → Category.ByName", "送品類名稱（例 \"Walls\"）會 FormatException"]},
     "All Elements of Category in View": {"create": "All Elements of Category in View", "inputs": ["Category", "View"], "outputs": ["Elements"], "nodeName": "All Elements of Category in View", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)", "badNames": ["Selection.All Elements of Category in View"]},
     "Document.ActiveView": {"create": "Document.ActiveView", "inputs": ["document"], "outputs": ["View"], "creationName": "Revit.Application.Document.ActiveView", "nodeName": "Document.ActiveView", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
-    "Views": {"create": "DSRevitNodesUI.Views", "inputs": [], "outputs": ["Views"], "badNames": ["Views"], "gotchas": ["'Views' 會建出 Sheet.Views（圖紙上的視圖），不是視圖下拉選單；請用類別全名 DSRevitNodesUI.Views"], "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"}
+    "Views": {"create": "DSRevitNodesUI.Views", "inputs": [], "outputs": ["Views"], "badNames": ["Views"], "gotchas": ["'Views' 會建出 Sheet.Views（圖紙上的視圖），不是視圖下拉選單；請用類別全名 DSRevitNodesUI.Views"], "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Revit.Elements.Element.GetParameterValueByName@string": {"create": "Revit.Elements.Element.GetParameterValueByName@string", "inputs": ["element", "parameterName"], "outputs": ["var[]..[]"], "creationName": "Revit.Elements.Element.GetParameterValueByName@string", "nodeName": "Element.GetParameterValueByName", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"}
   },
   "patterns": {
     "表格匯出 Excel": "表頭 Code Block [\"欄1\",\"欄2\"] + 資料列 → List.AddItemToFront(item=表頭, list=資料列) → Data.ExportExcel(data)。多欄資料列可用 Code Block: DSCore.List.Transpose([a, b, c]);",
@@ -236,6 +237,83 @@
       ],
       "status": "verified",
       "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    },
+    "選擇品類→所有元件→取參數值": {
+      "description": "選品類取得模型中所有元件，再用參數名稱取每個元件的參數值。",
+      "keywords": [
+        "品類",
+        "元件",
+        "參數",
+        "參數值",
+        "category",
+        "parameter",
+        "GetParameterValueByName"
+      ],
+      "nodes": [
+        {
+          "ref": "categories",
+          "name": "Categories",
+          "note": "由使用者在下拉選單選品類",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "all_elements_of_category",
+          "name": "All Elements of Category",
+          "x": 300,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_input_stringinput",
+          "name": "CoreNodeModels.Input.StringInput",
+          "x": 300,
+          "y": 200,
+          "value": "Mark"
+        },
+        {
+          "ref": "revit_elements_element_getparametervaluebyname_string",
+          "name": "Revit.Elements.Element.GetParameterValueByName@string",
+          "x": 650,
+          "y": 50
+        },
+        {
+          "ref": "watch",
+          "name": "Watch",
+          "x": 1000,
+          "y": 50
+        }
+      ],
+      "connectors": [
+        {
+          "from": "categories",
+          "fromPort": 0,
+          "to": "all_elements_of_category",
+          "toPort": 0
+        },
+        {
+          "from": "all_elements_of_category",
+          "fromPort": 0,
+          "to": "revit_elements_element_getparametervaluebyname_string",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_stringinput",
+          "fromPort": 0,
+          "to": "revit_elements_element_getparametervaluebyname_string",
+          "toPort": 1
+        },
+        {
+          "from": "revit_elements_element_getparametervaluebyname_string",
+          "fromPort": 0,
+          "to": "watch",
+          "toPort": 0
+        }
+      ],
+      "status": "verified",
+      "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)",
+      "gotchas": [
+        "String 的 value 為參數名稱（例 Mark、Comments），區分大小寫"
+      ]
     }
   }
 }

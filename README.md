@@ -130,6 +130,7 @@ graph TD
 - `get_node_recipe` - 從已驗證節點 registry 批次查詢建立名稱、埠順序與陷阱（建圖前先呼叫，離線可用）
 - `get_node_pattern` - 查詢已記住的節點連接模式（含連線），回傳可直接執行的 JSON
 - `save_node_pattern` - 把執行成功的節點+連線存成可重用模式（對照工作區驗證）
+- `capture_node_pattern` - 把 Dynamo 畫面上框選的節點+連線擷取成模式（值從已存檔的 .dyn 讀取）
 - `search_nodes` - 搜尋可用節點，回傳可直接建立的 `create` 名稱 (舊名: list_available_nodes)
 - `run_autotest` - 執行自動化測試
 - `get_script_library` - 取得腳本庫清單

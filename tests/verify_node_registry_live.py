@@ -151,6 +151,9 @@ async def main(args):
                               allow_fallback=False, clientId="registry-verify")
             status = await bridge.call("get_graph_status")
             problems = node_registry.check_pattern_in_graph(inst, status.get("nodes"), status.get("connectors"))
+            if not problems and pattern.get("status") != "verified":
+                # captured / unverified 模式實機建立成功 -> 升級為 verified
+                node_registry.mark_pattern_verified(name, node_registry.detect_dynamo_version(status.get("processId")))
             results.append({"name": name, "pattern": True, "result": "FAIL" if problems else "PASS",
                             "reason": "; ".join(problems) or
                             f"{len(inst['nodes'])} 節點 / {len(inst['connectors'])} 連線全部建立"})

@@ -1452,6 +1452,23 @@ class MCPBridgeServer:
                 "readOnlyHint": False
             },
             {
+                "name": "capture_node_pattern",
+                "description": "把使用者在 Dynamo 畫面上手動建好的節點+連線擷取成可重用的連接模式。預設擷取目前選取的節點（請使用者先在 Dynamo 框選），或用 nodeIds 指定。建立名稱優先取自已驗證 registry；節點值（String、Code Block、Python）從已存檔的 .dyn 讀取。存成 status 'captured'，跑 tests/verify_node_registry_live.py 通過後變 verified。",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "模式名稱"},
+                        "description": {"type": "string", "description": "這個模式做什麼、何時使用"},
+                        "keywords": {"type": "array", "items": {"type": "string"}, "description": "搜尋關鍵字（中英文皆可）"},
+                        "gotchas": {"type": "array", "items": {"type": "string"}, "description": "已知陷阱"},
+                        "nodeIds": {"type": "array", "items": {"type": "string"}, "description": "選用。要擷取的節點 GUID；未提供則用目前選取的節點"},
+                        "overwrite": {"type": "boolean", "description": "同名模式已存在時是否覆寫，預設 false"}
+                    },
+                    "required": ["name"]
+                },
+                "readOnlyHint": False
+            },
+            {
                 "name": "search_nodes",
                 "description": "在 Dynamo 庫中搜尋節點（先用 get_node_recipe，查不到的再用這個）。每個結果的 create 欄位即可傳給 execute_dynamo_instructions 的 name；不要使用 fullName。",
                 "inputSchema": {
@@ -1725,6 +1742,8 @@ class MCPBridgeServer:
                 return get_node_pattern(**args)
             elif name == "save_node_pattern":
                 return await save_node_pattern(**args)
+            elif name == "capture_node_pattern":
+                return await capture_node_pattern(**args)
             elif name == "analyze_workspace":
                 return await analyze_workspace()
             elif name == "get_graph_status":
@@ -2389,6 +2408,57 @@ async def save_node_pattern(name: str, instructions: str, description: str = "",
     result = node_registry.save_pattern(name, data, description, keywords, gotchas, problems, version, overwrite)
     if result.get("status") == "ok" and problems is None:
         result["note"] = "Dynamo 未連線，無法對照工作區，模式標記為 unverified"
+    return json.dumps(result, ensure_ascii=False)
+
+async def capture_node_pattern(name: str, description: str = "", keywords: list = None, gotchas: list = None,
+                               nodeIds: list = None, overwrite: bool = False, sessionId: str = None) -> str:
+    def fail(msg): return json.dumps({"status": "error", "message": msg}, ensure_ascii=False)
+
+    with ws_manager._lock: sessions = list(ws_manager.active_sessions.keys())
+    if not sessions: return fail("Dynamo 未連線")
+    session_id = sessionId if sessionId in sessions else sessions[-1]
+    status = await _safe_send(session_id, {"action": "get_graph_status"})
+    structured = await _safe_send(session_id, {"action": "get_nodes_structured"})
+    if status is None or structured is None: return fail("無法讀取工作區")
+
+    source = "nodeIds"
+    if not nodeIds:
+        nodeIds = [n["id"] for n in structured.get("nodes") or [] if n.get("isSelected")]
+        source = "selection"
+        if not nodeIds:
+            return fail("沒有選取任何節點：請先在 Dynamo 框選要存成模式的節點，或提供 nodeIds")
+
+    # 節點值只能從已存檔的 .dyn 讀（MCP 讀不到）
+    dyn, dyn_note = None, None
+    file_name = (status.get("workspace") or {}).get("fileName") or ""
+    if file_name and os.path.exists(file_name):
+        try:
+            with open(file_name, "r", encoding="utf-8-sig") as f:
+                dyn = json.load(f)
+            saved = datetime.fromtimestamp(os.path.getmtime(file_name)).strftime("%Y-%m-%d %H:%M")
+            dyn_note = f"節點值取自存檔 {os.path.basename(file_name)}（{saved}）；之後未存檔的修改不會包含"
+        except Exception as e:
+            dyn_note = f"讀取 .dyn 失敗，未取得節點值: {e}"
+    else:
+        dyn_note = "工作區未存檔，無法取得節點值（String、Code Block、Python 等需手動補）"
+
+    built = node_registry.build_pattern_from_workspace(
+        status.get("nodes") or [], status.get("connectors") or [], nodeIds, structured.get("nodes") or [], dyn)
+    all_gotchas = list(gotchas or []) + [f"模式外輸入: {e}" for e in built["externalInputs"]]
+    version = CONFIG.get("node_registry", {}).get("dynamo_version") \
+        or node_registry.detect_dynamo_version(status.get("processId"))
+    result = node_registry.save_pattern(name, built["instructions"], description, keywords, all_gotchas,
+                                        problems=None, dynamo_version=version, overwrite=overwrite,
+                                        status="captured")
+    if result.get("status") == "ok":
+        result.update({
+            "capturedFrom": source,
+            "createSources": dict(Counter(built["sources"].values())),
+            "warnings": built["warnings"],
+            "externalInputs": built["externalInputs"],
+            "valueNote": dyn_note,
+            "next": "在空白工作區執行 python tests/verify_node_registry_live.py 驗證，通過後狀態會改為 verified",
+        })
     return json.dumps(result, ensure_ascii=False)
 
 def get_mcp_guidelines() -> str:

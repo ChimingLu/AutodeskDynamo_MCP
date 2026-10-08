@@ -257,5 +257,76 @@ class PatternTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class CaptureFromWorkspaceTest(unittest.TestCase):
+    # 模擬 get_graph_status / get_nodes_structured / .dyn 的實際欄位
+    GRAPH = [
+        {"id": G1, "name": "String", "fullName": "CoreNodeModels.Input.StringInput", "creationName": "", "x": 100, "y": 100},
+        {"id": G2, "name": "Category.ByName", "fullName": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction",
+         "creationName": "Revit.Elements.Category.ByName@string", "x": 350, "y": 100},
+        {"id": G3, "name": "String.Join", "fullName": "Dynamo.Graph.Nodes.ZeroTouch.DSVarArgFunction",
+         "creationName": "DSCore.String.Join@string,string[]", "x": 600, "y": 100},
+        {"id": "44444444-4444-4444-4444-444444444444", "name": "Element Types",
+         "fullName": "DSRevitNodesUI.ElementTypes", "creationName": "", "x": 0, "y": 0},
+        {"id": "55555555-5555-5555-5555-555555555555", "name": "Watch", "fullName": "CoreNodeModels.Watch",
+         "creationName": "", "x": 900, "y": 100},
+    ]
+    CONNECTORS = [
+        {"from": G1, "fromPort": 0, "to": G2, "toPort": 0},
+        {"from": G2, "fromPort": 0, "to": G3, "toPort": 1},
+        {"from": G3, "fromPort": 0, "to": "55555555-5555-5555-5555-555555555555", "toPort": 0},
+    ]
+    DYN = {"Nodes": [{"ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+                      "Id": G1.replace("-", ""), "InputValue": "OST_Walls"}]}
+
+    def test_choose_create_names(self):
+        reg = node_registry.load_registry(SEED)
+        c = lambda g: node_registry.choose_create_name(g, reg)
+        self.assertEqual(c(self.GRAPH[0]), ("CoreNodeModels.Input.StringInput", "registry"))
+        self.assertEqual(c(self.GRAPH[1]), ("Category.ByName", "registry"))
+        self.assertEqual(c(self.GRAPH[3]), ("DSRevitNodesUI.ElementTypes", "className"))
+        self.assertEqual(c({"id": G1, "name": "Views", "fullName": "DSRevitNodesUI.Views", "creationName": ""}),
+                         ("DSRevitNodesUI.Views", "registry"))
+        self.assertEqual(c({"id": G1, "name": "Foo", "fullName": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction",
+                            "creationName": "Pkg.Foo@int"}), ("Pkg.Foo@int", "creationName"))
+
+    def test_build_pattern_from_selection_with_dyn_values(self):
+        reg = node_registry.load_registry(SEED)
+        built = node_registry.build_pattern_from_workspace(self.GRAPH, self.CONNECTORS, [G1, G2, G3], [], self.DYN, reg)
+        nodes = {n["id"]: n for n in built["instructions"]["nodes"]}
+        self.assertEqual(set(nodes), {G1, G2, G3})
+        self.assertEqual(nodes[G1]["value"], "OST_Walls")
+        self.assertEqual(len(built["instructions"]["connectors"]), 2)  # 到 Watch 的連線在選取範圍外
+        self.assertEqual(built["externalInputs"], [])
+        self.assertEqual(built["sources"][G3], "registry")  # String.Join 已 auto-verified
+
+    def test_missing_values_and_external_inputs_are_reported(self):
+        reg = node_registry.load_registry(SEED)
+        built = node_registry.build_pattern_from_workspace(self.GRAPH, self.CONNECTORS, [G2, G3], [], None, reg)
+        self.assertEqual(built["externalInputs"], ["Category.ByName[0] ← String（模式外的節點）"])
+        built = node_registry.build_pattern_from_workspace(self.GRAPH, self.CONNECTORS, [G1], [], None, reg)
+        self.assertIn("note", built["instructions"]["nodes"][0])
+        self.assertTrue(built["warnings"])
+
+    def test_capture_saved_as_captured_then_marked_verified(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            path = os.path.join(tmp, "r.json")
+            shutil.copy(SEED, path)
+            reg = node_registry.load_registry(path)
+            built = node_registry.build_pattern_from_workspace(self.GRAPH, self.CONNECTORS, [G1, G2], [], self.DYN, reg)
+            node_registry.save_pattern("OST品類", built["instructions"], "x", ["品類"], path=path, status="captured")
+            p = node_registry.load_registry(path)["patterns"]["OST品類"]
+            self.assertEqual(p["status"], "captured")
+            self.assertNotIn("verified", p)
+            self.assertEqual(p["nodes"][0]["value"], "OST_Walls")
+            self.assertEqual([n["x"] for n in p["nodes"]], [0, 250])
+            inst = node_registry.instantiate_pattern(p)["instructions"]
+            self.assertEqual(inst["nodes"][0]["value"], "OST_Walls")
+            self.assertTrue(node_registry.mark_pattern_verified("OST品類", "Dynamo 2.6", path=path))
+            self.assertEqual(node_registry.load_registry(path)["patterns"]["OST品類"]["status"], "verified")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

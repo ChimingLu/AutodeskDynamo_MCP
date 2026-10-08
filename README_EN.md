@@ -129,6 +129,7 @@ This project provides an AI automation interface through **Model Context Protoco
 - `get_node_recipe` - Batch lookup of verified create names, port order and gotchas from the node registry (call before building a graph; works offline)
 - `get_node_pattern` - Look up remembered node connection patterns (with connectors) and get ready-to-execute JSON
 - `save_node_pattern` - Save a successfully built set of nodes + connectors as a reusable pattern (verified against the workspace)
+- `capture_node_pattern` - Capture the nodes + connectors selected in Dynamo as a pattern (values read from the saved .dyn)
 - `search_nodes` - Search available nodes; returns the `create` name that actually creates the node (formerly `list_available_nodes`)
 - `run_autotest` - Execute automated tests
 - `get_script_library` - Get script library list

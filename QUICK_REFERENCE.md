@@ -29,7 +29,7 @@
 #### 0. 先查節點 registry
 - 建圖前先以 `get_node_recipe(names=[...])` 查詢所有節點；只有查不到的才用 `search_nodes`（使用其 `create` 欄位，fullName 無法建立節點）。
 - 節點 id 用 GUID，執行成功後會自動記錄到 `domain/node_registry.json`。
-- 常見連線組合（例：選擇品類 → 視圖中該品類的所有元件）先用 `get_node_pattern(query=...)` 取得可直接執行的 JSON；新組合執行成功後用 `save_node_pattern` 存起來。
+- 常見連線組合（例：選擇品類 → 視圖中該品類的所有元件）先用 `get_node_pattern(query=...)` 取得可直接執行的 JSON；新組合執行成功後用 `save_node_pattern` 存起來；使用者手動拉好的組合，框選後用 `capture_node_pattern` 擷取（先存檔才能帶入節點值）。
 
 #### 1. 幽靈連線排除 (Anti-Ghosting)
 - **判定準則**：若 `analyze_workspace` 回報有節點，但畫面不可見，即為幽靈連線。

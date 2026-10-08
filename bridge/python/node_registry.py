@@ -584,12 +584,130 @@ def check_pattern_in_graph(instructions: dict, graph_nodes: list, graph_connecto
     return problems
 
 
+_GENERIC_NODE_TYPES = ("Dynamo.Graph.Nodes.ZeroTouch.", "Dynamo.Graph.Nodes.CustomNodes.")
+_CAPTURED_STATUS = "captured"
+
+
+def _plain_id(text) -> str:
+    return str(text or "").replace("-", "").lower()
+
+
+def read_dyn_values(dyn: dict) -> Dict[str, dict]:
+    """從 .dyn 檔讀出節點的值（MCP 讀不到）：{無連字號小寫 id: {value / pythonCode / inputCount}}。"""
+    out = {}
+    for n in (dyn or {}).get("Nodes") or []:
+        ctype = n.get("ConcreteType", "")
+        v = {}
+        if "CodeBlockNodeModel" in ctype and "Code" in n:
+            v["value"] = n["Code"]
+        elif "PythonNode" in ctype and "Code" in n:
+            v["pythonCode"] = n["Code"]
+            v["inputCount"] = len(n.get("Inputs") or [])
+        elif "InputValue" in n:
+            val = n["InputValue"]
+            v["value"] = str(val).lower() if isinstance(val, bool) else str(val)
+        elif "SelectedIndex" in n:
+            v["value"] = str(n["SelectedIndex"])
+        if v:
+            out[_plain_id(n.get("Id"))] = v
+    return out
+
+
+def choose_create_name(g: dict, reg: dict, index: dict = None) -> tuple:
+    """由工作區節點反推可建立的名稱：(create, source)。source: registry / creationName / className / unresolved"""
+    index = index if index is not None else build_index(reg)
+    full = g.get("fullName") or ""
+    generic = full.startswith(_GENERIC_NODE_TYPES)
+    for candidate in (g.get("creationName"), None if generic else full):
+        if candidate:
+            hit = _find(reg, index, candidate)
+            if hit and hit[1] != "badName":
+                create = reg["nodes"][hit[0]].get("create")
+                if create and name_matches_node(create, g):
+                    return create, "registry"
+    if g.get("name"):
+        hit = _find(reg, index, g["name"])
+        if hit and hit[1] != "badName":
+            create = reg["nodes"][hit[0]].get("create")
+            if create and name_matches_node(create, g):
+                return create, "registry"
+    if g.get("creationName"):
+        return g["creationName"], "creationName"
+    if full and not generic:
+        return full, "className"  # UI 節點：類別全名可建立（DSRevitNodesUI.Views、CoreNodeModels.Input.StringInput 實測）
+    return g.get("name") or "", "unresolved"
+
+
+def build_pattern_from_workspace(graph_nodes: list, graph_connectors: list, node_ids, structured_nodes: list = None,
+                                 dyn: dict = None, reg: dict = None) -> dict:
+    """
+    把工作區中指定節點（含彼此間連線）轉成 instructions。
+    回傳 {"instructions", "sources": {id: source}, "warnings": [], "externalInputs": []}
+    """
+    reg = reg if reg is not None else load_registry()
+    index = build_index(reg)
+    wanted = {str(i).lower() for i in node_ids}
+    ports = {str(n.get("id", "")).lower(): n for n in structured_nodes or []}
+    values = read_dyn_values(dyn) if dyn else {}
+    nodes, sources, warnings = [], {}, []
+    for g in graph_nodes or []:
+        gid = str(g.get("id", "")).lower()
+        if gid not in wanted:
+            continue
+        create, source = choose_create_name(g, reg, index)
+        sources[gid] = source
+        node = {"id": gid, "name": create, "x": g.get("x", 0), "y": g.get("y", 0)}
+        node.update(values.get(_plain_id(gid), {}))
+        full = g.get("fullName") or ""
+        needs_value = any(t in full for t in (".Input.", "CodeBlockNodeModel", "PythonNode")) or \
+            (full.startswith("DSRevitNodesUI.") and not (ports.get(gid) or {}).get("inputs"))
+        if needs_value and not any(k in node for k in ("value", "pythonCode")):
+            node["note"] = "值未擷取（MCP 讀不到節點值；存檔後再擷取，或手動補 value/pythonCode）"
+            warnings.append(f"{g.get('name')}: 未取得值，需手動補上")
+        if source == "unresolved":
+            warnings.append(f"{g.get('name')}: 找不到可建立的名稱（自訂節點？），請手動補 name")
+        elif source != "registry":
+            node.setdefault("note", f"create 名稱來自 {source}，尚未驗證")
+        nodes.append(node)
+
+    present = {n["id"] for n in nodes}
+    names = {str(g.get("id", "")).lower(): g.get("name") for g in graph_nodes or []}
+    connectors, external = [], []
+    for c in graph_connectors or []:
+        f, t = str(c.get("from", "")).lower(), str(c.get("to", "")).lower()
+        if f in present and t in present:
+            connectors.append({"from": f, "fromPort": int(c.get("fromPort", 0)), "to": t, "toPort": int(c.get("toPort", 0))})
+        elif t in present:
+            external.append(f"{names.get(t)}[{c.get('toPort', 0)}] ← {names.get(f)}（模式外的節點）")
+    missing = wanted - present
+    if missing:
+        warnings.append(f"{len(missing)} 個 id 不在工作區: {', '.join(sorted(missing))}")
+    return {"instructions": {"nodes": nodes, "connectors": connectors}, "sources": sources,
+            "warnings": warnings, "externalInputs": external}
+
+
+def mark_pattern_verified(name: str, dynamo_version: str = None, path: str = None) -> bool:
+    """實機驗證通過後把模式標記為 verified（verify_node_registry_live.py 使用）。"""
+    with _write_lock:
+        reg = load_registry(path)
+        pattern = reg["patterns"].get(name)
+        if not is_structured_pattern(pattern):
+            return False
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        new = {"status": "verified", "verified": f"{dynamo_version or 'unknown'} ({now})"}
+        if all(pattern.get(k) == v for k, v in new.items()):
+            return True
+        pattern.update(new)
+        save_registry(reg, path)
+    return True
+
+
 def save_pattern(name: str, instructions: dict, description: str = "", keywords: List[str] = None,
                  gotchas: List[str] = None, problems: Optional[List[str]] = None, dynamo_version: str = None,
-                 overwrite: bool = False, path: str = None) -> dict:
+                 overwrite: bool = False, path: str = None, status: str = None) -> dict:
     """
     把一組已建好的 nodes/connectors 存成模式。problems=None 表示未對照工作區（status unverified），
-    [] 表示已在工作區確認全部節點與連線存在（status verified）。
+    [] 表示已在工作區確認全部節點與連線存在（status verified）。status 可覆寫（例：captured）。
     """
     nodes_in = instructions.get("nodes") or []
     if not name or not nodes_in:
@@ -617,8 +735,8 @@ def save_pattern(name: str, instructions: dict, description: str = "", keywords:
         "nodes": nodes,
         "connectors": connectors,
         "gotchas": list(gotchas or []),
-        "status": "verified" if problems == [] else "unverified",
-        "verified": f"{dynamo_version or 'unknown'} ({now})" if problems == [] else None,
+        "status": status or ("verified" if problems == [] else "unverified"),
+        "verified": f"{dynamo_version or 'unknown'} ({now})" if problems == [] and not status else None,
     }
     pattern = {k: v for k, v in pattern.items() if v not in (None, "", [])}
     with _write_lock:
