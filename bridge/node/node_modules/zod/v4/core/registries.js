@@ -1,6 +1,6 @@
 var _a;
-export const $output = Symbol("ZodOutput");
-export const $input = Symbol("ZodInput");
+export const $output = /*@__PURE__*/ Symbol("ZodOutput");
+export const $input = /*@__PURE__*/ Symbol("ZodInput");
 export class $ZodRegistry {
     constructor() {
         this._map = new WeakMap();

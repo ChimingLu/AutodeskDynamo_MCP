@@ -4,6 +4,7 @@ export const parse = /* @__PURE__ */ core._parse(ZodRealError);
 export const parseAsync = /* @__PURE__ */ core._parseAsync(ZodRealError);
 export const safeParse = /* @__PURE__ */ core._safeParse(ZodRealError);
 export const safeParseAsync = /* @__PURE__ */ core._safeParseAsync(ZodRealError);
+export { validate, validateAsync } from "../core/index.js";
 // Codec functions
 export const encode = /* @__PURE__ */ core._encode(ZodRealError);
 export const decode = /* @__PURE__ */ core._decode(ZodRealError);

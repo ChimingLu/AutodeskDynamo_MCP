@@ -86,6 +86,8 @@ This project provides an AI automation interface through **Model Context Protoco
 
 ### Quick Start (Universal for All AI)
 
+> **Prerequisite**: Node.js 20 or later (`@hono/node-server` 2.x used by `bridge/node` requires Node 20+). Check with `node -v`.
+
 #### 1. Configure MCP Connection
 
 **Antigravity / Gemini CLI**:

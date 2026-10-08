@@ -1,7 +1,7 @@
 import type * as JSONSchema from "./json-schema.js";
 import type { $ZodRegistry } from "./registries.js";
 import type * as schemas from "./schemas.js";
-import { type JSONSchemaGeneratorParams, type ProcessParams, type Seen } from "./to-json-schema.js";
+import { type JSONSchemaGeneratorParams, type ProcessParams, type Seen, type ToJSONSchemaContext } from "./to-json-schema.js";
 /**
  * Parameters for the emit method of JSONSchemaGenerator.
  * @deprecated Use toJSONSchema function instead
@@ -36,7 +36,7 @@ export declare class JSONSchemaGenerator {
     /** @deprecated Access via ctx instead */
     get target(): ({} & string) | "draft-2020-12" | "draft-07" | "openapi-3.0" | "draft-04";
     /** @deprecated Access via ctx instead */
-    get unrepresentable(): "any" | "throw";
+    get unrepresentable(): ToJSONSchemaContext["unrepresentable"];
     /** @deprecated Access via ctx instead */
     get override(): (ctx: {
         zodSchema: schemas.$ZodType;

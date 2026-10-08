@@ -1,5 +1,6 @@
 export type Schema = ObjectSchema | ArraySchema | StringSchema | NumberSchema | IntegerSchema | BooleanSchema | NullSchema;
 export type _JSONSchema = boolean | JSONSchema;
+export type SchemaType = "object" | "array" | "string" | "number" | "boolean" | "null" | "integer";
 export type JSONSchema = {
     [k: string]: unknown;
     $schema?: "https://json-schema.org/draft/2020-12/schema" | "http://json-schema.org/draft-07/schema#" | "http://json-schema.org/draft-04/schema#";
@@ -11,7 +12,7 @@ export type JSONSchema = {
     $vocabulary?: Record<string, boolean>;
     $comment?: string;
     $defs?: Record<string, JSONSchema>;
-    type?: "object" | "array" | "string" | "number" | "boolean" | "null" | "integer";
+    type?: SchemaType | SchemaType[];
     additionalItems?: _JSONSchema;
     unevaluatedItems?: _JSONSchema;
     prefixItems?: _JSONSchema[];

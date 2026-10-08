@@ -87,6 +87,8 @@ graph TD
 
 ### 快速開始（適用所有 AI）
 
+> **前置需求**：Node.js 20 以上（`bridge/node` 依賴的 `@hono/node-server` 2.x 需要 Node 20+）。可用 `node -v` 確認版本。
+
 #### 1. 配置 MCP 連線
 
 **Antigrav**ity / Gemini CLI**:
