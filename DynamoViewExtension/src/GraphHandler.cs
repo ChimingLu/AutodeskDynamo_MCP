@@ -117,7 +117,9 @@ namespace DynamoMCPListener
                         fullName = n.GetType().FullName,
                         creationName = n.GetType().GetProperty("CreationName")?.GetValue(n)?.ToString() ?? n.Name,
                         x = n.X,
-                        y = n.Y
+                        y = n.Y,
+                        isInput = GetBoolProperty(n, "IsSetAsInput"),
+                        isOutput = GetBoolProperty(n, "IsSetAsOutput")
                     }).ToList();
 
                     var connectors = workspace.Connectors
@@ -534,7 +536,7 @@ namespace DynamoMCPListener
             }
             catch (Exception ex)
             {
-                MCPLogger.Error($"Error executing instructions: {ex.Message}");
+                MCPLogger.Error("Error executing instructions", ex);
                 return JsonConvert.SerializeObject(new { status = "error", message = ex.Message });
             }
         }
@@ -690,6 +692,13 @@ namespace DynamoMCPListener
                 }
             }
 
+            // Variadic nodes (List.Create, String.Concat, ...) support inputCount as well
+            if (n["inputCount"] != null)
+            {
+                var createdNode = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(nd => nd.GUID == dynamoGuid);
+                if (createdNode != null) AdjustInputPorts(createdNode, n["inputCount"].ToObject<int>());
+            }
+
             HandlePreview(n, dynamoGuid);
         }
 
@@ -762,6 +771,55 @@ namespace DynamoMCPListener
                     var updateCmd = new DynamoModel.UpdateModelValueCommand(Guid.Empty, guid, "IsVisible", "false");
                     _dynamoModel.ExecuteCommand(updateCmd);
                 }
+            }
+
+            HandleIOFlags(n, guid);
+        }
+
+        // Sets NodeModel.IsSetAsInput / IsSetAsOutput (Dynamo Player / Generative Design "Is Input" / "Is Output")
+        private void HandleIOFlags(JToken n, Guid guid)
+        {
+            JToken inputFlag = n["isInput"] ?? n["IsSetAsInput"];
+            JToken outputFlag = n["isOutput"] ?? n["IsSetAsOutput"];
+            if (inputFlag == null && outputFlag == null) return;
+
+            var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(nd => nd.GUID == guid);
+            if (node == null) return;
+
+            TrySetBoolProperty(node, "IsSetAsInput", inputFlag);
+            TrySetBoolProperty(node, "IsSetAsOutput", outputFlag);
+        }
+
+        private static bool? GetBoolProperty(NodeModel node, string propertyName)
+        {
+            try
+            {
+                return node.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public)?.GetValue(node) as bool?;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void TrySetBoolProperty(NodeModel node, string propertyName, JToken flag)
+        {
+            if (flag == null) return;
+            try
+            {
+                var prop = node.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                if (prop != null && prop.CanWrite)
+                {
+                    prop.SetValue(node, flag.ToObject<bool>());
+                }
+                else
+                {
+                    MCPLogger.Warning($"[IOFlags] {propertyName} not writable on {node.GetType().Name}");
+                }
+            }
+            catch (Exception ex)
+            {
+                MCPLogger.Warning($"[IOFlags] Failed to set {propertyName}: {ex.Message}");
             }
         }
 
