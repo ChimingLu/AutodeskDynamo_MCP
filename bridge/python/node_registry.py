@@ -659,8 +659,10 @@ def build_pattern_from_workspace(graph_nodes: list, graph_connectors: list, node
         node = {"id": gid, "name": create, "x": g.get("x", 0), "y": g.get("y", 0)}
         node.update(values.get(_plain_id(gid), {}))
         full = g.get("fullName") or ""
-        needs_value = any(t in full for t in (".Input.", "CodeBlockNodeModel", "PythonNode")) or \
-            (full.startswith("DSRevitNodesUI.") and not (ports.get(gid) or {}).get("inputs"))
+        # Code Block / Python 一定要有內容；輸入類節點（String、File Path、下拉選單）只有在沒有輸入埠時才需要值
+        has_inputs = bool((ports.get(gid) or {}).get("inputs"))
+        needs_value = any(t in full for t in ("CodeBlockNodeModel", "PythonNode")) or \
+            (not has_inputs and (".Input." in full or full.startswith("DSRevitNodesUI.")))
         if needs_value and not any(k in node for k in ("value", "pythonCode")):
             node["note"] = "值未擷取（MCP 讀不到節點值；存檔後再擷取，或手動補 value/pythonCode）"
             warnings.append(f"{g.get('name')}: 未取得值，需手動補上")

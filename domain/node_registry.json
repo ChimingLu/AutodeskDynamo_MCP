@@ -314,6 +314,431 @@
       "gotchas": [
         "String 的 value 為參數名稱（例 Mark、Comments），區分大小寫"
       ]
+    },
+    "Excel 工作表 → 去表頭 → 轉置成欄": {
+      "description": "讀取 Excel 指定工作表，去掉第一列表頭並轉置，Code Block 依欄位輸出（L[0] 第 1 欄、L[1] 第 2 欄）。",
+      "keywords": [
+        "Excel",
+        "讀取",
+        "匯入",
+        "ImportExcel",
+        "工作表",
+        "表頭",
+        "轉置",
+        "欄",
+        "sheet",
+        "table"
+      ],
+      "nodes": [
+        {
+          "ref": "dsoffice_data_importexcel_var_string_bool_bool",
+          "name": "DSOffice.Data.ImportExcel@var,string,bool,bool",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 835,
+          "y": 7
+        },
+        {
+          "ref": "corenodemodels_input_fileobject",
+          "name": "CoreNodeModels.Input.FileObject",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 207,
+          "y": 59
+        },
+        {
+          "ref": "corenodemodels_input_filename",
+          "name": "CoreNodeModels.Input.Filename",
+          "value": ".\\Level&GridCreate.xlsx",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 0,
+          "y": 56
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "\"LevelCreate\";",
+          "x": 579,
+          "y": 72
+        },
+        {
+          "ref": "dscore_list_transpose_var",
+          "name": "DSCore.List.Transpose@var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1282,
+          "y": 17
+        },
+        {
+          "ref": "dscore_list_restofitems_var",
+          "name": "DSCore.List.RestOfItems@var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1092,
+          "y": 14
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "L[0];\nL[1];",
+          "x": 1549,
+          "y": 0
+        }
+      ],
+      "connectors": [
+        {
+          "from": "dsoffice_data_importexcel_var_string_bool_bool",
+          "fromPort": 0,
+          "to": "dscore_list_restofitems_var",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_fileobject",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_filename",
+          "fromPort": 0,
+          "to": "corenodemodels_input_fileobject",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "code_block2",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_restofitems_var",
+          "fromPort": 0,
+          "to": "dscore_list_transpose_var",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "File Path 為相對路徑時，是相對於 .dyn 的位置；新圖請改成絕對路徑",
+        "Code Block 的 L[0]; L[1]; 依實際欄數增減",
+        "readAsStrings 預設 false：數字名稱會讀成 1.0 這類數值，要當文字用可接 true"
+      ],
+      "status": "captured"
+    },
+    "Excel → 建立樓層（名稱 + 高程）": {
+      "description": "由 Excel 工作表（第 1 欄樓層名稱、第 2 欄高程）批次建立 Revit 樓層。",
+      "keywords": [
+        "樓層",
+        "建立樓層",
+        "標高",
+        "Level",
+        "高程",
+        "elevation",
+        "Excel",
+        "批次"
+      ],
+      "nodes": [
+        {
+          "ref": "revit_elements_level_byelevationandname_double_string",
+          "name": "Revit.Elements.Level.ByElevationAndName@double,string",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 2072,
+          "y": 25
+        },
+        {
+          "ref": "dsoffice_data_importexcel_var_string_bool_bool",
+          "name": "DSOffice.Data.ImportExcel@var,string,bool,bool",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 835,
+          "y": 7
+        },
+        {
+          "ref": "corenodemodels_input_fileobject",
+          "name": "CoreNodeModels.Input.FileObject",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 207,
+          "y": 59
+        },
+        {
+          "ref": "corenodemodels_input_filename",
+          "name": "CoreNodeModels.Input.Filename",
+          "value": ".\\Level&GridCreate.xlsx",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 0,
+          "y": 56
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "\"LevelCreate\";",
+          "x": 579,
+          "y": 72
+        },
+        {
+          "ref": "dscore_list_transpose_var",
+          "name": "DSCore.List.Transpose@var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1282,
+          "y": 17
+        },
+        {
+          "ref": "dscore_list_restofitems_var",
+          "name": "DSCore.List.RestOfItems@var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1092,
+          "y": 14
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "L[0];\nL[1];",
+          "x": 1549,
+          "y": 0
+        }
+      ],
+      "connectors": [
+        {
+          "from": "dsoffice_data_importexcel_var_string_bool_bool",
+          "fromPort": 0,
+          "to": "dscore_list_restofitems_var",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_fileobject",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_filename",
+          "fromPort": 0,
+          "to": "corenodemodels_input_fileobject",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "dsoffice_data_importexcel_var_string_bool_bool",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "code_block2",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_restofitems_var",
+          "fromPort": 0,
+          "to": "dscore_list_transpose_var",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "revit_elements_level_byelevationandname_double_string",
+          "toPort": 1
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 1,
+          "to": "revit_elements_level_byelevationandname_double_string",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "高程單位為專案單位（mm）；同名樓層已存在會失敗",
+        "File Path 為相對路徑時，是相對於 .dyn 的位置"
+      ],
+      "status": "captured"
+    },
+    "依偏移距離建立平行網格並命名": {
+      "description": "輸入表格（G[0] 網格名稱、G[2] 偏移距離），在原點建一條基準線，依偏移距離複製成多條網格並設定名稱。此版本沿 Y 偏移（線平行 X 軸）；要沿 X 偏移，把兩個 Translate 的 x/y 埠對調。",
+      "keywords": [
+        "網格",
+        "軸線",
+        "格線",
+        "Grid",
+        "建立網格",
+        "偏移",
+        "命名",
+        "Grid.ByLine"
+      ],
+      "nodes": [
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "G[0];\nG[2];",
+          "x": 0,
+          "y": 135
+        },
+        {
+          "ref": "autodesk_designscript_geometry_point_origin",
+          "name": "Autodesk.DesignScript.Geometry.Point.Origin",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 314,
+          "y": 113
+        },
+        {
+          "ref": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "name": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 492,
+          "y": 203
+        },
+        {
+          "ref": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "name": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 783,
+          "y": 134
+        },
+        {
+          "ref": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "name": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 826,
+          "y": 421
+        },
+        {
+          "ref": "revit_elements_grid_byline_autodesk_designscript_geometry_line",
+          "name": "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1255,
+          "y": 103
+        },
+        {
+          "ref": "dscore_list_maximumitem_var",
+          "name": "DSCore.List.MaximumItem@var[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 96,
+          "y": 271
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "\"名稱\";",
+          "x": 1612,
+          "y": 35
+        },
+        {
+          "ref": "revit_elements_element_setparameterbyname_string_var",
+          "name": "Revit.Elements.Element.SetParameterByName@string,var",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1933,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_fromobject",
+          "name": "CoreNodeModels.FromObject",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 1349,
+          "y": 394
+        },
+        {
+          "ref": "var_var",
+          "name": "+@var[]..[],var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 293,
+          "y": 357
+        },
+        {
+          "ref": "code_block3",
+          "name": "Code Block",
+          "value": "100;",
+          "x": 95,
+          "y": 421
+        }
+      ],
+      "connectors": [
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "corenodemodels_fromobject",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 1,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "toPort": 2
+        },
+        {
+          "from": "autodesk_designscript_geometry_point_origin",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_point_origin",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "toPort": 1
+        },
+        {
+          "from": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_geometry_translate_double_double_double2",
+          "fromPort": 0,
+          "to": "revit_elements_grid_byline_autodesk_designscript_geometry_line",
+          "toPort": 0
+        },
+        {
+          "from": "revit_elements_grid_byline_autodesk_designscript_geometry_line",
+          "fromPort": 0,
+          "to": "revit_elements_element_setparameterbyname_string_var",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_maximumitem_var",
+          "fromPort": 0,
+          "to": "var_var",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "revit_elements_element_setparameterbyname_string_var",
+          "toPort": 1
+        },
+        {
+          "from": "corenodemodels_fromobject",
+          "fromPort": 0,
+          "to": "revit_elements_element_setparameterbyname_string_var",
+          "toPort": 2
+        },
+        {
+          "from": "var_var",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_translate_double_double_double",
+          "toPort": 1
+        },
+        {
+          "from": "code_block3",
+          "fromPort": 0,
+          "to": "var_var",
+          "toPort": 1
+        }
+      ],
+      "gotchas": [
+        "基準線長度 = 另一方向最大偏移 + 100，原圖由另一組網格的偏移距離提供（模式外輸入）",
+        "名稱用 Element.SetParameterByName 設定參數「名稱」（中文版 Revit 參數名）",
+        "Excel 數字名稱讀成 1.0 時，原圖另一組以 String.Split('.') 取第一段",
+        "模式外輸入: List.MaximumItem[0] ← Code Block（模式外的節點）",
+        "模式外輸入: Code Block[0] ← List.Transpose（模式外的節點）"
+      ],
+      "status": "captured"
     }
   }
 }
