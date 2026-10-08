@@ -155,8 +155,7 @@ namespace DynamoMCPListener
 
                 if (action == "create_group")
                 {
-                    CreateGroup(data);
-                    return "{\"status\": \"ok\", \"message\": \"Group created\"}";
+                    return CreateGroup(data);
                 }
                 
                 // === MCP Resources Layer: Structured Data Queries ===
@@ -958,39 +957,381 @@ namespace DynamoMCPListener
             return JsonConvert.SerializeObject(new { status = "ok", debug = result });
         }
 
-        private DynamoModel.RecordableCommand CreateAnnotationCommandCompat(Guid annotationGuid, string title, string description, double x, double y)
+        private DynamoModel.RecordableCommand CreateAnnotationCommandCompat(
+            Guid annotationGuid,
+            string title,
+            string description,
+            double x,
+            double y)
         {
+            // Every known Dynamo version (2.3 ~ 4.x) builds the group from the nodes that are
+            // currently selected; the IEnumerable<Guid> constructors do NOT seed members, they only
+            // use the first GUID as the annotation id. So always pass our own fresh annotation GUID.
             var commandType = typeof(DynamoModel.CreateAnnotationCommand);
             var annotationText = string.IsNullOrWhiteSpace(description)
                 ? title
                 : $"{title}{Environment.NewLine}{description}";
 
-            foreach (var ctor in commandType.GetConstructors())
+            var ctors = commandType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var guidList = new List<Guid> { annotationGuid };
+
+            object BuildIdArg(Type paramType)
+            {
+                if (paramType == typeof(Guid))
+                    return annotationGuid;
+                if (paramType.IsAssignableFrom(typeof(List<Guid>)))
+                    return guidList;
+                return null;
+            }
+
+            // Prefer Guid-first constructors, then IEnumerable<Guid>; prefer (title, description) when available.
+            var ordered = ctors
+                .Where(c => c.GetParameters().Length == 5 || c.GetParameters().Length == 6)
+                .OrderBy(c => c.GetParameters()[0].ParameterType == typeof(Guid) ? 0 : 1)
+                .ThenByDescending(c => c.GetParameters().Length);
+
+            foreach (var ctor in ordered)
             {
                 var parameters = ctor.GetParameters();
-                if (parameters.Length == 6)
-                {
-                    return (DynamoModel.RecordableCommand)ctor.Invoke(new object[] { annotationGuid, title, description, x, y, false });
-                }
+                var idArg = BuildIdArg(parameters[0].ParameterType);
+                if (idArg == null)
+                    continue;
 
-                if (parameters.Length == 5)
+                try
                 {
-                    return (DynamoModel.RecordableCommand)ctor.Invoke(new object[] { annotationGuid, annotationText, x, y, false });
+                    if (parameters.Length == 6)
+                        return (DynamoModel.RecordableCommand)ctor.Invoke(new object[] { idArg, title, description, x, y, false });
+
+                    return (DynamoModel.RecordableCommand)ctor.Invoke(new object[] { idArg, annotationText, x, y, false });
+                }
+                catch (Exception ex)
+                {
+                    MCPLogger.Warning($"[CreateGroup] CreateAnnotationCommand ctor invoke failed ({ctor}): {ex.Message}");
                 }
             }
 
             throw new MissingMethodException("Unsupported CreateAnnotationCommand constructor.");
         }
 
-        private void CreateGroup(JToken data)
+        private HashSet<Guid> GetAnnotationNodeIds(AnnotationModel annotation)
+        {
+            var ids = new HashSet<Guid>();
+            if (annotation == null)
+                return ids;
+
+            try
+            {
+                var nodesProp = annotation.GetType().GetProperty("Nodes", BindingFlags.Public | BindingFlags.Instance);
+                if (nodesProp?.GetValue(annotation) is System.Collections.IEnumerable members)
+                {
+                    foreach (var member in members)
+                    {
+                        if (member is NodeModel nodeMember)
+                        {
+                            ids.Add(nodeMember.GUID);
+                            continue;
+                        }
+
+                        var guidProp = member?.GetType().GetProperty("GUID", BindingFlags.Public | BindingFlags.Instance);
+                        var guidObj = guidProp?.GetValue(member);
+                        if (guidObj is Guid g)
+                        {
+                            ids.Add(g);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MCPLogger.Warning($"[CreateGroup] Failed to inspect annotation members: {ex.Message}");
+            }
+
+            return ids;
+        }
+
+        private HashSet<Guid> GetGroupedNodeIds(WorkspaceModel workspace)
+        {
+            var grouped = new HashSet<Guid>();
+            if (workspace?.Annotations == null)
+                return grouped;
+
+            foreach (var annotation in workspace.Annotations)
+            {
+                foreach (var id in GetAnnotationNodeIds(annotation))
+                {
+                    grouped.Add(id);
+                }
+            }
+
+            return grouped;
+        }
+
+        private DynamoModel.RecordableCommand CreateSelectModelCommandCompat(Guid modelGuid)
+        {
+            return CreateSelectModelCommandCompat(new[] { modelGuid });
+        }
+
+        // SelectModelCommand semantics (Dynamo 2.x+): Guid.Empty clears the selection; a multi-GUID
+        // command adds every listed model that is not yet selected.
+        private DynamoModel.RecordableCommand CreateSelectModelCommandCompat(IEnumerable<Guid> modelGuids)
+        {
+            var commandType = typeof(DynamoModel.SelectModelCommand);
+            var ctors = commandType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var guids = modelGuids?.ToArray() ?? new Guid[0];
+            var modelGuid = guids.FirstOrDefault();
+
+            object BuildFirstArg(Type firstType)
+            {
+                if (guids.Length == 1 && firstType == typeof(Guid))
+                    return modelGuid;
+
+                if (guids.Length == 1 && firstType == typeof(string))
+                    return modelGuid.ToString();
+
+                if (firstType != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(firstType))
+                {
+                    if (!firstType.IsGenericType)
+                    {
+                        return guids;
+                    }
+
+                    var genericArg = firstType.GetGenericArguments().FirstOrDefault();
+                    if (genericArg == typeof(Guid) || genericArg == typeof(object))
+                        return guids.ToList();
+
+                    if (genericArg == typeof(string))
+                        return guids.Select(g => g.ToString()).ToList();
+                }
+
+                return null;
+            }
+
+            object BuildSecondArg(Type secondType)
+            {
+                if (secondType == typeof(int))
+                    return 0;
+
+                if (secondType.IsEnum)
+                    return Enum.ToObject(secondType, 0);
+
+                if (secondType.IsValueType)
+                    return Activator.CreateInstance(secondType);
+
+                return null;
+            }
+
+            foreach (var ctor in ctors)
+            {
+                var parameters = ctor.GetParameters();
+
+                try
+                {
+                    if (parameters.Length == 1)
+                    {
+                        var arg0 = BuildFirstArg(parameters[0].ParameterType);
+                        if (arg0 != null)
+                            return (DynamoModel.RecordableCommand)ctor.Invoke(new[] { arg0 });
+                    }
+
+                    if (parameters.Length == 2)
+                    {
+                        var arg0 = BuildFirstArg(parameters[0].ParameterType);
+                        var arg1 = BuildSecondArg(parameters[1].ParameterType);
+                        if (arg0 != null && arg1 != null)
+                            return (DynamoModel.RecordableCommand)ctor.Invoke(new[] { arg0, arg1 });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MCPLogger.Warning($"[CreateGroup] SelectModelCommand ctor invoke failed ({ctor}): {ex.Message}");
+                }
+            }
+
+            var ctorSignatures = string.Join(", ",
+                ctors.Select(c =>
+                {
+                    var p = c.GetParameters();
+                    return $"({string.Join(", ", p.Select(x => x.ParameterType.Name))})";
+                }));
+
+            MCPLogger.Warning($"[CreateGroup] SelectModelCommand constructors discovered: {ctorSignatures}");
+
+            throw new MissingMethodException("Unsupported SelectModelCommand constructor.");
+        }
+
+        private AnnotationModel WaitForAnnotation(WorkspaceModel workspace, Guid annotationGuid, int timeoutMs = 2000, ISet<Guid> annotationGuidsBefore = null)
+        {
+            if (workspace?.Annotations == null)
+                return null;
+
+            // Match the requested GUID first; otherwise (when a pre-command snapshot is given)
+            // accept the single annotation that did not exist before. Never fall back to node GUIDs.
+            AnnotationModel Find()
+            {
+                var exact = workspace.Annotations.FirstOrDefault(a => a?.GUID == annotationGuid);
+                if (exact != null || annotationGuidsBefore == null)
+                    return exact;
+                return workspace.Annotations.FirstOrDefault(a => a != null && !annotationGuidsBefore.Contains(a.GUID));
+            }
+
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                var found = Find();
+                if (found != null)
+                    return found;
+
+                System.Threading.Thread.Sleep(50);
+            }
+
+            return Find();
+        }
+
+        private void ClearSelectionCompat(WorkspaceModel workspace)
+        {
+            try
+            {
+                // SelectModelCommand with Guid.Empty clears DynamoSelection (which is internal to DynamoCore).
+                _dynamoModel.ExecuteCommand(CreateSelectModelCommandCompat(Guid.Empty));
+            }
+            catch (Exception ex)
+            {
+                MCPLogger.Warning($"[CreateGroup] Clear selection command failed: {ex.Message}");
+            }
+
+            if (workspace == null)
+                return;
+
+            // Older runtimes (Dynamo 2.6) read ModelBase.IsSelected directly, so make sure nothing stays flagged.
+            try
+            {
+                foreach (var n in workspace.Nodes)
+                    if (n.IsSelected) n.IsSelected = false;
+                foreach (var note in workspace.Notes)
+                    if (note.IsSelected) note.IsSelected = false;
+                foreach (var a in workspace.Annotations)
+                    if (a.IsSelected) a.IsSelected = false;
+            }
+            catch (Exception ex)
+            {
+                MCPLogger.Warning($"[CreateGroup] Failed to reset IsSelected flags: {ex.Message}");
+            }
+        }
+
+        private int SelectModelsCompat(IEnumerable<Dynamo.Graph.ModelBase> models)
+        {
+            var targets = (models ?? Enumerable.Empty<Dynamo.Graph.ModelBase>()).Where(m => m != null).ToList();
+            var toSelect = targets.Where(m => !m.IsSelected).Select(m => m.GUID).ToList();
+
+            if (toSelect.Any())
+            {
+                try
+                {
+                    // Goes through DynamoSelection, which keeps ModelBase.IsSelected in sync.
+                    _dynamoModel.ExecuteCommand(CreateSelectModelCommandCompat(toSelect));
+                }
+                catch (Exception ex)
+                {
+                    MCPLogger.Warning($"[CreateGroup] SelectModelCommand failed for {toSelect.Count} model(s): {ex.Message}");
+                }
+            }
+
+            // Fallback: Dynamo 2.x builds groups from ModelBase.IsSelected, so set the flag directly if needed.
+            foreach (var model in targets.Where(m => !m.IsSelected))
+            {
+                try
+                {
+                    model.IsSelected = true;
+                }
+                catch (Exception ex)
+                {
+                    MCPLogger.Warning($"[CreateGroup] Direct selection failed for {model.GUID}: {ex.Message}");
+                }
+            }
+
+            return targets.Count(m => m.IsSelected);
+        }
+
+        private bool TrySelectAnnotationCompat(WorkspaceModel workspace, Guid annotationGuid)
+        {
+            var annotation = WaitForAnnotation(workspace, annotationGuid, 500);
+            if (annotation == null)
+            {
+                MCPLogger.Warning($"[CreateGroup] Annotation {annotationGuid} not found in workspace.");
+                return false;
+            }
+
+            // AddModelToGroupCommand targets the first selected annotation, so only this one may be selected.
+            ClearSelectionCompat(workspace);
+            if (SelectModelsCompat(new[] { annotation }) == 1)
+                return true;
+
+            MCPLogger.Warning($"[CreateGroup] Annotation {annotationGuid} could not be selected.");
+            return false;
+        }
+
+        private void AddNodesToGroupWithFallback(WorkspaceModel workspace, AnnotationModel annotation, IEnumerable<Guid> nodeGuids)
+        {
+            var ids = nodeGuids?.Distinct().ToList() ?? new List<Guid>();
+            if (!ids.Any() || annotation == null)
+                return;
+
+            if (!TrySelectAnnotationCompat(workspace, annotation.GUID))
+            {
+                MCPLogger.Warning($"[CreateGroup] Unable to select annotation {annotation.GUID} before grouping.");
+                return;
+            }
+
+            try
+            {
+                _dynamoModel.ExecuteCommand(new DynamoModel.AddModelToGroupCommand(ids));
+            }
+            catch (Exception bulkEx)
+            {
+                MCPLogger.Warning($"[CreateGroup] Bulk add failed: {bulkEx.Message}");
+            }
+
+            var members = GetAnnotationNodeIds(annotation);
+            var stillMissing = ids.Where(id => !members.Contains(id)).ToList();
+            if (!stillMissing.Any())
+                return;
+
+            MCPLogger.Warning($"[CreateGroup] {stillMissing.Count} node(s) still missing after bulk add, fallback to single add.");
+            foreach (var id in stillMissing)
+            {
+                try
+                {
+                    if (!TrySelectAnnotationCompat(workspace, annotation.GUID))
+                    {
+                        MCPLogger.Warning($"[CreateGroup] Skip node {id}, target annotation is not selectable.");
+                        continue;
+                    }
+                    _dynamoModel.ExecuteCommand(new DynamoModel.AddModelToGroupCommand(new[] { id }));
+                }
+                catch (Exception ex)
+                {
+                    MCPLogger.Warning($"[CreateGroup] Failed to add node {id}: {ex.Message}");
+                }
+            }
+        }
+
+        private string CreateGroup(JToken data)
         {
             var nodeIds = data["nodeIds"]?.ToObject<List<string>>() ?? new List<string>();
             string title = data["title"]?.ToString() ?? "New Group";
             string description = data["description"]?.ToString() ?? "";
             string color = data["color"]?.ToString() ?? "#FFC1D5E0";
-            
+            var workspace = GetWorkspace();
+
+            if (workspace == null)
+            {
+                return JsonConvert.SerializeObject(new { status = "error", message = "Workspace unavailable" });
+            }
+
             // Resolve node IDs
             var nodesToGroup = new List<NodeModel>();
+            var groupedNodeIds = GetGroupedNodeIds(workspace);
+            int skippedAlreadyGrouped = 0;
             foreach (var idStr in nodeIds)
             {
                 Guid guid;
@@ -998,47 +1339,111 @@ namespace DynamoMCPListener
                 else if (_nodeIdMap.TryGetValue(idStr, out Guid mapped)) guid = mapped;
                 else continue;
 
-                var node = _dynamoModel.CurrentWorkspace.Nodes.FirstOrDefault(n => n.GUID == guid);
-                if (node != null) nodesToGroup.Add(node);
+                var node = workspace.Nodes.FirstOrDefault(n => n.GUID == guid);
+                if (node == null) continue;
+
+                if (groupedNodeIds.Contains(node.GUID))
+                {
+                    skippedAlreadyGrouped++;
+                    continue;
+                }
+
+                if (!nodesToGroup.Contains(node))
+                    nodesToGroup.Add(node);
             }
 
             if (!nodesToGroup.Any())
             {
-                MCPLogger.Warning("[CreateGroup] No valid nodes found.");
-                return;
+                MCPLogger.Warning("[CreateGroup] No eligible nodes found (all missing or already grouped).");
+                return JsonConvert.SerializeObject(new
+                {
+                    status = "skipped",
+                    message = "No eligible nodes found",
+                    skippedAlreadyGrouped
+                });
             }
 
             // Calculate bounding box for group position
             double minX = nodesToGroup.Min(n => n.X);
             double minY = nodesToGroup.Min(n => n.Y);
             Guid annotationGuid = Guid.NewGuid();
+            var nodeGuids = nodesToGroup.Select(n => n.GUID).ToList();
 
-            // Deselect all models to prevent group nesting
-            foreach (var n in _dynamoModel.CurrentWorkspace.Nodes)
-                n.IsSelected = false;
-            foreach (var a in _dynamoModel.CurrentWorkspace.Annotations)
-                a.IsSelected = false;
-
-            // Step 1: Create the annotation (group container)
-            var createAnnotationCommand = CreateAnnotationCommandCompat(
-                annotationGuid, title, description, minX - 10, minY - 55);
-            _dynamoModel.ExecuteCommand(createAnnotationCommand);
-
-            // Step 2: Select the annotation so AddModelToGroupCommand knows the target group
-            _dynamoModel.ExecuteCommand(new DynamoModel.SelectModelCommand(annotationGuid.ToString(), 0));
-            
-            // Step 3: AddModelToGroupCommand(IEnumerable<Guid>) adds to currently selected group
-            var nodeGuids = nodesToGroup.Select(n => n.GUID);
-            _dynamoModel.ExecuteCommand(new DynamoModel.AddModelToGroupCommand(nodeGuids));
-
-            // Step 4: Set background color
-            if (!string.IsNullOrEmpty(color))
+            int addedCount;
+            Guid effectiveAnnotationGuid;
+            try
             {
-                _dynamoModel.ExecuteCommand(new DynamoModel.UpdateModelValueCommand(
-                    _dynamoModel.CurrentWorkspace.Guid, annotationGuid, "Background", color));
+                // Step 1: Dynamo builds the group from the current selection, so select exactly the target
+                // nodes. With an empty selection, Dynamo 2.x silently refuses to create a group as soon as
+                // any other group exists (CheckIfModelExistsInSameGroup), which broke every group after the first.
+                ClearSelectionCompat(workspace);
+                int selectedCount = SelectModelsCompat(nodesToGroup);
+                if (selectedCount < nodesToGroup.Count)
+                {
+                    MCPLogger.Warning($"[CreateGroup] Only {selectedCount}/{nodesToGroup.Count} nodes could be selected before grouping.");
+                }
+
+                // Step 2: Create the annotation (group container) and identify it by GUID or by diffing the collection.
+                var annotationGuidsBefore = new HashSet<Guid>(workspace.Annotations.Select(a => a.GUID));
+                _dynamoModel.ExecuteCommand(CreateAnnotationCommandCompat(
+                    annotationGuid, title, description, minX - 10, minY - 55));
+
+                var createdAnnotation = WaitForAnnotation(workspace, annotationGuid, 1000, annotationGuidsBefore);
+                if (createdAnnotation == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Create group failed: Dynamo did not create an annotation (selected {selectedCount}/{nodesToGroup.Count} nodes).");
+                }
+                effectiveAnnotationGuid = createdAnnotation.GUID;
+
+                // Step 3: Add any nodes the runtime did not pick up from the selection.
+                var members = GetAnnotationNodeIds(createdAnnotation);
+                var missing = nodeGuids.Where(g => !members.Contains(g)).ToList();
+                if (missing.Any())
+                {
+                    MCPLogger.Warning($"[CreateGroup] Annotation {effectiveAnnotationGuid} missing {missing.Count} node(s) after creation, adding explicitly.");
+                    AddNodesToGroupWithFallback(workspace, createdAnnotation, missing);
+                    members = GetAnnotationNodeIds(createdAnnotation);
+                }
+
+                addedCount = nodeGuids.Count(g => members.Contains(g));
+                if (addedCount == 0)
+                {
+                    throw new InvalidOperationException("Create group failed: no nodes were added to annotation.");
+                }
+
+                // Step 4: Set background color
+                if (!string.IsNullOrEmpty(color))
+                {
+                    try
+                    {
+                        _dynamoModel.ExecuteCommand(new DynamoModel.UpdateModelValueCommand(
+                            workspace.Guid, effectiveAnnotationGuid, "Background", color));
+                    }
+                    catch (Exception ex)
+                    {
+                        MCPLogger.Warning($"[CreateGroup] Failed to set color: {ex.Message}");
+                    }
+                }
+            }
+            finally
+            {
+                // Leave nothing selected so the next group neither nests nor picks up stale members.
+                ClearSelectionCompat(workspace);
             }
 
-            MCPLogger.Info($"[CreateGroup] Created group '{title}' with {nodesToGroup.Count} nodes at ({minX:F0}, {minY:F0}).");
+            MCPLogger.Info($"[CreateGroup] Created group '{title}' with {addedCount}/{nodesToGroup.Count} nodes at ({minX:F0}, {minY:F0}), annotation={effectiveAnnotationGuid}. Skipped already grouped={skippedAlreadyGrouped}.");
+
+            return JsonConvert.SerializeObject(new
+            {
+                status = "ok",
+                message = "Group created",
+                requested = nodeIds.Count,
+                eligible = nodesToGroup.Count,
+                added = addedCount,
+                annotationId = effectiveAnnotationGuid.ToString(),
+                skippedAlreadyGrouped
+            });
         }
     }
 }
