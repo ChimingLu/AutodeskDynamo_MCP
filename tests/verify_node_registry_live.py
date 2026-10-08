@@ -89,7 +89,7 @@ async def main(args):
                 continue
             gid = str(uuid.uuid4())
             good[gid] = key
-            nodes.append({"id": gid, "name": entry["create"], "x": 5000 + (i % 6) * 320, "y": (i // 6) * 220})
+            nodes.append({"id": gid, "name": entry["create"], "x": (i % 6) * 360, "y": (i // 6) * 260})
         r1 = await bridge.call("execute_dynamo_instructions", instructions=json.dumps({"nodes": nodes, "connectors": []}),
                                allow_fallback=False, clientId="registry-verify")
         after = await bridge.graph()
@@ -122,7 +122,7 @@ async def main(args):
                 bad_meta[gid] = (key, bad)
                 # creationName 覆寫可繞過 bridge 的自動更正，直接送出錯誤名稱
                 bad_nodes.append({"id": gid, "name": bad, "creationName": bad,
-                                  "x": 7200 + (len(bad_nodes) % 4) * 320, "y": (len(bad_nodes) // 4) * 220})
+                                  "x": 2500 + (len(bad_nodes) % 2) * 420, "y": (len(bad_nodes) // 2) * 260})
         if bad_nodes:
             await bridge.call("execute_dynamo_instructions", instructions=json.dumps({"nodes": bad_nodes, "connectors": []}),
                               allow_fallback=False, clientId="registry-verify")
@@ -140,7 +140,15 @@ async def main(args):
                     row.update(result="FAIL", reason="badName 竟建出與 create 相同的節點，可從 badNames 移除")
                 results.append(row)
 
-        if started_empty and not args.keep:
+        if args.keep:
+            # 分組方便目視：正確 create vs. badNames 錯誤示範
+            ok_ids = [g for g in good if g in after]
+            if ok_ids:
+                await bridge.call("create_group", nodeIds=ok_ids, title="registry create（應全部正確）", color="#B9F6CA")
+            bad_ids = [g for g in bad_meta if g in after2]
+            if bad_ids:
+                await bridge.call("create_group", nodeIds=bad_ids, title="badNames 錯誤示範（建出錯的節點）", color="#FFCDD2")
+        elif started_empty:
             await bridge.call("clear_workspace")
 
     os.makedirs(os.path.dirname(REPORT_PATH), exist_ok=True)
