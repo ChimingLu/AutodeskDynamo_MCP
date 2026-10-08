@@ -697,8 +697,11 @@ def mark_pattern_verified(name: str, dynamo_version: str = None, path: str = Non
             return False
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         new = {"status": "verified", "verified": f"{dynamo_version or 'unknown'} ({now})"}
-        if all(pattern.get(k) == v for k, v in new.items()):
+        stale = [n for n in pattern["nodes"] if "尚未驗證" in n.get("note", "")]
+        if not stale and all(pattern.get(k) == v for k, v in new.items()):
             return True
+        for n in stale:  # 實機已建立成功，「create 名稱尚未驗證」的註記不再成立
+            n.pop("note")
         pattern.update(new)
         save_registry(reg, path)
     return True
