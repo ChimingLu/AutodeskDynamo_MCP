@@ -127,7 +127,8 @@ graph TD
 - `execute_dynamo_instructions` - 創建節點與連線
 - `analyze_workspace` - 分析工作區狀態
 - `generate_workspace_mermaid` - 產生工作區 Mermaid 流程圖與 Markdown 邏輯分析
-- `search_nodes` - 搜尋可用節點 (舊名: list_available_nodes)
+- `get_node_recipe` - 從已驗證節點 registry 批次查詢建立名稱、埠順序與陷阱（建圖前先呼叫，離線可用）
+- `search_nodes` - 搜尋可用節點，回傳可直接建立的 `create` 名稱 (舊名: list_available_nodes)
 - `run_autotest` - 執行自動化測試
 - `get_script_library` - 取得腳本庫清單
 - `clear_workspace` - 清除工作區

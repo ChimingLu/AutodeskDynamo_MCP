@@ -1,5 +1,9 @@
 為了確保 AI 在控制 Autodesk Dynamo 時不發生低級錯誤（如點座標重疊、誤用 2D 節點等），特訂定此規範。**AI 在執行任何繪圖指令前必須檢查此規範。**
 
+> [!IMPORTANT]
+> **建圖前先查節點 registry**：建立圖表前，先以 `get_node_recipe` 一次查詢所有要用的節點（回傳已驗證的 `create` 名稱、埠順序、設值方式、陷阱與全域規則）；只有查不到的節點才用 `search_nodes`，並使用其 `create` 欄位（不要用 fullName）。
+> Registry 位於 `domain/node_registry.json`；`execute_dynamo_instructions` 成功後會自動學習新節點（status `auto-verified`，節點 id 需為 GUID），建立失敗的名稱會記入 `badNames`。
+
 ## 📂 專案結構
 
 - **`bridge/`**: **[核心橋接]** 存放通訊與工具邏輯。
