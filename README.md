@@ -1,4 +1,4 @@
-﻿**語言 / Language:** [繁體中文](README.md) | [English](README_EN.md)
+**語言 / Language:** [繁體中文](README.md) | [English](README_EN.md)
 
 ---
 
@@ -9,15 +9,14 @@
 
 ---
 
-## 🚀 最新版本 v3.4：強化分析與視覺化 (Enhanced Analysis & Visualization)
+## 🚀 最新版本 v3.6：節點知識庫與模式復用 (Node Registry & Patterns)
 
-本專案已升級至 **v3.4**，引入了強大的腳本分析工具與節點管理功能：
+本專案已升級至 **v3.6**，引入了 Node Registry 知識庫與 Dynamo 節點組合模式的復用機制：
 
-1.  **視覺化分析 (`/image`)**：自動解析 Dynamo 腳本並生成 Mermaid 流程圖與分析報告，支援大型複雜圖表 (100+ 節點)。
-  - **正式工具入口**：`generate_workspace_mermaid`，可直接輸出 Mermaid、邏輯摘要與 Markdown 報告。
-2.  **節點分組 (`create_group`)**：支援將選定節點組織成組，提升圖表可讀性與管理效率。
-3.  **穩定性優化**：修復了大型圖表分析時的 WebSocket 逾時問題，並增強了自動啟動機制的可靠性。
-4.  **倉儲結構優化**：整理根目錄，將日誌、測試工具與實驗腳本分類存放，確保開發環境整潔。
+1.  **Node Registry 知識庫**：內建 `get_node_recipe` 工具，提供 AI 建立節點前的標準答案（精確的建置名稱、埠口順序與全域規則），大幅降低名稱誤判的錯誤率。
+2.  **連接模式復用 (Connection Patterns)**：支援透過 `get_node_pattern` 與 `save_node_pattern` 自動提取並驗證常用的節點組合；並提供 `capture_node_pattern` 讓使用者直接從 Dynamo 畫面框選擷取模式。
+3.  **節點參數與屬性控制**：新建節點時可指定 `isInput`/`isOutput` 以支援 Dynamo Player，並支援 `inputCount` 供 `List.Create` 等可變長度參數節點使用。
+4.  **跨 Revit 版本安裝驗證**：強化部署腳本與驗證流程，穩定支援跨 Revit 2020-2027 版本的自動化部署與測試。
 
 ---
 
@@ -71,6 +70,11 @@ graph TD
 - ✅ **ID 映射**：跨語言字串 ID → GUID 轉換
 - ✅ **預覽控制**：設定中間節點隱藏、最終結果顯示
 - 🔧 **技術**：跨語言 ID 映射機制（參閱 [`domain/node_connection_workflow.md`](domain/node_connection_workflow.md)）
+
+### 4. 節點參數與屬性控制 (Node Parameter & Property Control)
+- ✅ **輸入/輸出標記**：建立節點時支援設定 `isInput`/`isOutput` (供 Dynamo Player 使用)
+- ✅ **可變參數節點**：支援設定 `inputCount` 供 `List.Create`、`String.Split` 等動態埠口節點使用
+- 🔧 **技術**：C# 腳本動態擴充節點屬性與埠口
 
 ---
 

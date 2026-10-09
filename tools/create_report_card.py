@@ -22,7 +22,7 @@ ax.axis('off')
 # 這樣可以確保圖片內容與 image/Home_analysis.md 和 maximize_view_flowchart.png 一致
 report_data = {
     "title": "最大化窗外視野 (Maximize View)",
-    "subtitle": "Dynamo 技術分析報告 | v3.4",
+    "subtitle": "Dynamo 技術分析報告 | v3.6",
     "date": "2026-02-19",
     "stats": [
         ("節點總數 (Nodes)", "127", "#00bcd4"),

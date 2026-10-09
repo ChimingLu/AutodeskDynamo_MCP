@@ -9,14 +9,14 @@ With this system, AI can directly control Dynamo for BIM automation operations, 
 
 ---
 
-## 🚀 Latest Version v3.4: Enhanced Analysis & Visualization
-The project has been upgraded to **v3.4**, introducing powerful script analysis tools and node management features:
+## 🚀 Latest Version v3.6: Node Registry & Patterns
 
-1.  **Visualization Analysis (`/image`)**: Automatically analyze Dynamo scripts and generate Mermaid flowcharts and analysis reports, supporting large complex graphs (100+ nodes).
-  - **Formal tool entrypoint**: `generate_workspace_mermaid`, which returns Mermaid, logic summaries, and Markdown reports.
-2.  **Node Grouping (`create_group`)**: Support for organizing selected nodes into groups to improve graph readability and management efficiency.
-3.  **Stability Optimization**: Fixed WebSocket timeout issues when analyzing large graphs and enhanced the reliability of the auto-startup mechanism.
-4.  **Repository Structure Optimization**: Reorganized the root directory, classifying logs, testing tools, and experimental scripts into dedicated folders to ensure a clean development environment.
+The project has been upgraded to **v3.6**, introducing the Node Registry knowledge base and Dynamo node connection pattern reuse mechanisms:
+
+1.  **Node Registry Knowledge Base**: Built-in `get_node_recipe` tool provides AI with the correct answers before creating nodes (exact creation names, port orders, and global rules), significantly reducing name misidentification errors.
+2.  **Connection Patterns Reuse**: Supports automatic extraction and validation of common node combinations via `get_node_pattern` and `save_node_pattern`; also provides `capture_node_pattern` allowing users to directly capture patterns by selecting nodes on the Dynamo canvas.
+3.  **Node Parameter & Property Control**: Supports setting `isInput`/`isOutput` when creating nodes to support Dynamo Player, and supports `inputCount` for variable-length parameter nodes like `List.Create`.
+4.  **Cross-Revit Version Installation & Validation**: Enhanced deployment scripts and validation workflows to stably support automated deployment and testing across Revit versions 2020-2027.
 
 ---
 
@@ -70,6 +70,11 @@ graph TD
 - ✅ **ID Mapping**: Cross-language string ID → GUID conversion
 - ✅ **Preview Control**: Hide intermediate nodes, show final results
 - 🔧 **Technology**: Cross-language ID mapping mechanism (see [`domain/node_connection_workflow_EN.md`](domain/node_connection_workflow_EN.md))
+
+### 4. Node Parameter & Property Control
+- ✅ **Input/Output Flags**: Supports setting `isInput`/`isOutput` when creating nodes (for Dynamo Player usage).
+- ✅ **Variable Parameter Nodes**: Supports setting `inputCount` for dynamic port nodes like `List.Create` and `String.Split`.
+- 🔧 **Technology**: C# scripts dynamically expand node properties and ports.
 
 ---
 
