@@ -17,6 +17,7 @@ The project has been upgraded to **v3.6**, introducing the Node Registry knowled
 2.  **Connection Patterns Reuse**: Supports automatic extraction and validation of common node combinations via `get_node_pattern` and `save_node_pattern`; also provides `capture_node_pattern` allowing users to directly capture patterns by selecting nodes on the Dynamo canvas.
 3.  **Node Parameter & Property Control**: Supports setting `isInput`/`isOutput` when creating nodes to support Dynamo Player, and supports `inputCount` for variable-length parameter nodes like `List.Create`.
 4.  **Cross-Revit Version Installation & Validation**: Enhanced deployment scripts and validation workflows to stably support automated deployment and testing across Revit versions 2020-2027.
+5.  **Advanced 3D Geometry Connection Patterns**: Extracted and live-verified 4 zero-dependency geometry algorithm patterns (Top face extraction, perimeter boundary intersection check, bilateral symmetric extension, and iterative multi-curve surface splitting), supporting automated offset layout and color-coded group labeling.
 
 ---
 
@@ -137,6 +138,7 @@ This project provides an AI automation interface through **Model Context Protoco
 - `get_node_pattern` - Look up remembered node connection patterns (with connectors) and get ready-to-execute JSON
 - `save_node_pattern` - Save a successfully built set of nodes + connectors as a reusable pattern (verified against the workspace)
 - `capture_node_pattern` - Capture the nodes + connectors selected in Dynamo as a pattern (values read from the saved .dyn)
+- `create_group` - Create node groups with custom titles, descriptions, and color tags (Beta)
 - `search_nodes` - Search available nodes; returns the `create` name that actually creates the node (formerly `list_available_nodes`)
 - `run_autotest` - Execute automated tests
 - `get_script_library` - Get script library list

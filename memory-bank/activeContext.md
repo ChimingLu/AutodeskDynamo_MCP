@@ -16,11 +16,15 @@
 | 2026-10-08 | 導入 Connection Patterns | 將常用節點邏輯（如 Level/Grid Create）固化為可一鍵執行的 JSON 模式檔 |
 | 2026-10-08 | 節點屬性與可變參數增強 | 支援設定 `isInput`/`isOutput` (供 Dynamo Player 用)，並擴充 `inputCount` 到 `List.Create` 等節點 |
 | 2026-10-08 | Node.js 版本要求 | 升級 `@hono/node-server` 依賴，明確要求環境 Node.js >= 20 |
+| 2026-10-13 | 通用幾何連接模式擴充 | 提煉無套件依賴的高階 3D 幾何與演算法連接模式（頂面過濾、對稱延伸、迭代切面、邊界檢測）存入 Node Registry |
+| 2026-10-13 | 實機批次放置連接模式 | 將 4 組幾何連接模式（共 31 節點、29 連線）成功放置到 Dynamo 工作區，自動錯開座標並建立對應顏色群組標籤 |
 
 ## 🔄 進行中任務
 - [x] 建立並驗證基礎的 `capture_node_pattern` 流程（Level & Grid Create 已實機驗證通過）
 - [x] 更新 `README.md` 與 `README_EN.md` 包含 Node Registry 說明
-- [ ] 擴充更多 Dynamo 常用工作流為 Node Patterns（如 Element.GetParameterValueByName 等）
+- [x] 擴充更多 Dynamo 常用工作流為 Node Patterns（如 Element.GetParameterValueByName、OpenXML 讀取與匯出模式）
+- [x] 提煉實體頂面過濾、線段雙向延伸、DesignScript 多曲線迭代切割曲面、邊界穿越篩選等 4 組連接模式
+- [x] 實機驗證並批次放置 4 組幾何連接模式至 Dynamo 工作區並自動建立彩色分組
 - [ ] 完善 Custom Node (外掛節點) 的 GUID 映射表（Mapping Table）建置
 
 ## ⚠️ 待解決問題

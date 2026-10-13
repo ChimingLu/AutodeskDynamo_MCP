@@ -52,6 +52,7 @@
 | 畫面擷取模式 | 實作 `capture_node_pattern` 讓使用者能手動在畫面上圈選節點後擷取成模式檔案 | `server.py` |
 | 節點輸入輸出屬性 | 建立節點支援 `isInput`/`isOutput`，對應 Dynamo Player 的設定屬性 | `GraphHandler.cs` |
 | 可變參數節點支援 | 將 `inputCount` 擴充支援 `List.Create`、`String.Split` 等可變長度參數節點 | `GraphHandler.cs` |
+| 幾何連接模式擴充 | 提煉 4 組高階幾何演算法連接模式（頂面提取、邊界穿透檢測、雙向延伸、迭代切面）並通過實機驗證與彩色分組 | `domain/node_registry.json`, `server.py` |
 | 依賴與 Node.js 升級 | Node bridge 套件更新，明確要求 Node.js 20 以上執行環境 | `bridge/node/package.json` |
 
 ---
@@ -87,6 +88,8 @@
 ## 🚧 進行中
 
 - [ ] 外掛 GUID 映射表建置 (持續補充)
+- [x] 擴充通用 3D 幾何處理與演算法連接模式（水平頂面提取、線段對稱雙向延伸、多曲線迭代切面、曲面邊界穿透檢測）
+- [x] 實機驗證批次放置 4 組幾何演算法連接模式至 Dynamo 工作區並建立群組標籤
 - [ ] 更豐富的節點連接模式 (.dyn) 收集與測試
 
 ---

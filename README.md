@@ -17,6 +17,7 @@
 2.  **連接模式復用 (Connection Patterns)**：支援透過 `get_node_pattern` 與 `save_node_pattern` 自動提取並驗證常用的節點組合；並提供 `capture_node_pattern` 讓使用者直接從 Dynamo 畫面框選擷取模式。
 3.  **節點參數與屬性控制**：新建節點時可指定 `isInput`/`isOutput` 以支援 Dynamo Player，並支援 `inputCount` 供 `List.Create` 等可變長度參數節點使用。
 4.  **跨 Revit 版本安裝驗證**：強化部署腳本與驗證流程，穩定支援跨 Revit 2020-2027 版本的自動化部署與測試。
+5.  **通用 3D 幾何連接模式擴充**：提煉並實機驗證 4 組零套件依賴的高階幾何演算法連接模式（頂面提取、邊界周長穿透檢測、線段中心對稱雙向延伸、多曲線迭代切面），支援自動錯開座標放置與彩色群組標籤生成。
 
 ---
 
@@ -137,6 +138,7 @@ graph TD
 - `get_node_pattern` - 查詢已記住的節點連接模式（含連線），回傳可直接執行的 JSON
 - `save_node_pattern` - 把執行成功的節點+連線存成可重用模式（對照工作區驗證）
 - `capture_node_pattern` - 把 Dynamo 畫面上框選的節點+連線擷取成模式（值從已存檔的 .dyn 讀取）
+- `create_group` - 建立節點群組並支援自訂標題、說明與色票 (Beta)
 - `search_nodes` - 搜尋可用節點，回傳可直接建立的 `create` 名稱 (舊名: list_available_nodes)
 - `run_autotest` - 執行自動化測試
 - `get_script_library` - 取得腳本庫清單

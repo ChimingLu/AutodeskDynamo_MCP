@@ -69,12 +69,36 @@
     "Revit.Elements.Level.ByElevationAndName@double,string": {"create": "Revit.Elements.Level.ByElevationAndName@double,string", "inputs": ["elevation", "name"], "outputs": ["Level"], "creationName": "Revit.Elements.Level.ByElevationAndName@double,string", "nodeName": "Level.ByElevationAndName", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
     "Autodesk.DesignScript.Geometry.Point.Origin": {"create": "Autodesk.DesignScript.Geometry.Point.Origin", "inputs": [], "outputs": ["Point"], "creationName": "Autodesk.DesignScript.Geometry.Point.Origin", "nodeName": "Point.Origin", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
     "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double": {"create": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double", "inputs": ["geometry", "xTranslation", "yTranslation", "zTranslation"], "outputs": ["Geometry"], "creationName": "Autodesk.DesignScript.Geometry.Geometry.Translate@double,double,double", "nodeName": "Geometry.Translate", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
-    "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point": {"create": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point", "inputs": ["startPoint", "endPoint"], "outputs": ["Line"], "creationName": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point", "nodeName": "Line.ByStartPointEndPoint", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point": {"create": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point", "inputs": ["startPoint", "endPoint"], "outputs": ["Line"], "creationName": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point", "nodeName": "Line.ByStartPointEndPoint", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
     "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line": {"create": "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line", "inputs": ["line"], "outputs": ["Grid"], "creationName": "Revit.Elements.Grid.ByLine@Autodesk.DesignScript.Geometry.Line", "nodeName": "Grid.ByLine", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
     "DSCore.List.MaximumItem@var[]": {"create": "DSCore.List.MaximumItem@var[]", "inputs": ["list"], "outputs": ["max"], "creationName": "DSCore.List.MaximumItem@var[]", "nodeName": "List.MaximumItem", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
     "Revit.Elements.Element.SetParameterByName@string,var": {"create": "Revit.Elements.Element.SetParameterByName@string,var", "inputs": ["element", "parameterName", "value"], "outputs": ["Element"], "creationName": "Revit.Elements.Element.SetParameterByName@string,var", "nodeName": "Element.SetParameterByName", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
     "CoreNodeModels.FromObject": {"create": "CoreNodeModels.FromObject", "inputs": ["obj"], "outputs": ["str"], "nodeName": "String from Object", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
-    "+@var[]..[],var[]..[]": {"create": "+@var[]..[],var[]..[]", "inputs": ["x", "y"], "outputs": ["var[]..[]"], "creationName": "+@var[]..[],var[]..[]", "nodeName": "+", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"}
+    "+@var[]..[],var[]..[]": {"create": "+@var[]..[],var[]..[]", "inputs": ["x", "y"], "outputs": ["var[]..[]"], "creationName": "+@var[]..[],var[]..[]", "nodeName": "+", "status": "auto-verified", "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"},
+    "CoreNodeModels.Input.Directory": {"create": "CoreNodeModels.Input.Directory", "inputs": [], "outputs": [""], "nodeName": "Directory Path", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "CoreNodeModels.Input.DirectoryObject": {"create": "CoreNodeModels.Input.DirectoryObject", "inputs": ["path"], "outputs": ["directory"], "nodeName": "Directory From Path", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "DSCore.IO.FileSystem.GetDirectoryContents@var,string,bool": {"create": "DSCore.IO.FileSystem.GetDirectoryContents@var,string,bool", "inputs": ["directory", "searchString", "includeSubdirectories"], "outputs": ["files", "directories"], "creationName": "DSCore.IO.FileSystem.GetDirectoryContents@var,string,bool", "nodeName": "FileSystem.GetDirectoryContents", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Data.OpenXMLImportExcel": {"create": "Data.OpenXMLImportExcel", "inputs": ["filePath", "sheetName", "startRow", "startColumn", "readAsString"], "outputs": ["data"], "creationName": "DSOffice.Data.OpenXMLImportExcel@string,string,int,int,bool", "nodeName": "Data.OpenXMLImportExcel", "gotchas": ["無需安裝 Microsoft Excel 即可讀取 .xlsx", "filePath 直接接檔案路徑字串（File Path 節點），不需接 File.FromPath", "回傳 2D 清單（以列為單位），通常需接 List.Transpose 轉為直欄"], "verified": "Dynamo Core 2.x / 4.x"},
+    "DSOffice.Data.OpenXMLImportExcel@string,string,int,int,bool": {"create": "Data.OpenXMLImportExcel", "inputs": ["filePath", "sheetName", "startRow", "startColumn", "readAsString"], "outputs": ["data"], "creationName": "DSOffice.Data.OpenXMLImportExcel@string,string,int,int,bool", "nodeName": "Data.OpenXMLImportExcel", "status": "auto-verified", "verified": "Dynamo Core 2.x / 4.x"},
+    "Data.OpenXMLExportExcel": {"create": "Data.OpenXMLExportExcel", "inputs": ["filePath", "sheetName", "data", "startRow", "startColumn", "overWrite", "writeAsString"], "outputs": ["bool"], "creationName": "DSOffice.Data.OpenXMLExportExcel@string,string,var[][],int,int,bool,bool", "nodeName": "Data.OpenXMLExportExcel", "gotchas": ["無需安裝 Microsoft Excel 即可寫入 .xlsx", "filePath 直接接檔案路徑字串（File Path 節點），不需接 File.FromPath", "data 必須為 2D 清單 var[][]（列為單位）", "overWrite 預設 false，覆寫現有檔案時需傳入 true"], "verified": "Dynamo Core 2.x / 4.x"},
+    "DSOffice.Data.OpenXMLExportExcel@string,string,var[][],int,int,bool,bool": {"create": "Data.OpenXMLExportExcel", "inputs": ["filePath", "sheetName", "data", "startRow", "startColumn", "overWrite", "writeAsString"], "outputs": ["bool"], "creationName": "DSOffice.Data.OpenXMLExportExcel@string,string,var[][],int,int,bool,bool", "nodeName": "Data.OpenXMLExportExcel", "status": "auto-verified", "verified": "Dynamo Core 2.x / 4.x"},
+    "Autodesk.DesignScript.Geometry.Vector.Normalized": {"create": "Autodesk.DesignScript.Geometry.Vector.Normalized", "inputs": ["vector"], "outputs": ["Vector"], "creationName": "Autodesk.DesignScript.Geometry.Vector.Normalized", "nodeName": "Vector.Normalized", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Surface.NormalAtParameter@double,double": {"create": "Autodesk.DesignScript.Geometry.Surface.NormalAtParameter@double,double", "inputs": ["surface", "u", "v"], "outputs": ["Vector"], "creationName": "Autodesk.DesignScript.Geometry.Surface.NormalAtParameter@double,double", "nodeName": "Surface.NormalAtParameter", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Vector.IsAlmostEqualTo@Autodesk.DesignScript.Geometry.Vector": {"create": "Autodesk.DesignScript.Geometry.Vector.IsAlmostEqualTo@Autodesk.DesignScript.Geometry.Vector", "inputs": ["vector", "otherVector"], "outputs": ["bool"], "creationName": "Autodesk.DesignScript.Geometry.Vector.IsAlmostEqualTo@Autodesk.DesignScript.Geometry.Vector", "nodeName": "Vector.IsAlmostEqualTo", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Vector.ZAxis": {"create": "Autodesk.DesignScript.Geometry.Vector.ZAxis", "inputs": [], "outputs": ["Vector"], "creationName": "Autodesk.DesignScript.Geometry.Vector.ZAxis", "nodeName": "Vector.ZAxis", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "DSCore.List.Flatten@var[]..[],int": {"create": "DSCore.List.Flatten@var[]..[],int", "inputs": ["list", "amount"], "outputs": ["list"], "creationName": "DSCore.List.Flatten@var[]..[],int", "nodeName": "List.Flatten", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Geometry.Explode": {"create": "Autodesk.DesignScript.Geometry.Geometry.Explode", "inputs": ["geometry"], "outputs": ["Geometry[]"], "creationName": "Autodesk.DesignScript.Geometry.Geometry.Explode", "nodeName": "Geometry.Explode", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Surface.PerimeterCurves": {"create": "Autodesk.DesignScript.Geometry.Surface.PerimeterCurves", "inputs": ["surface"], "outputs": ["Curve[]"], "creationName": "Autodesk.DesignScript.Geometry.Surface.PerimeterCurves", "nodeName": "Surface.PerimeterCurves", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Geometry.DoesIntersect@Autodesk.DesignScript.Geometry.Geometry": {"create": "Autodesk.DesignScript.Geometry.Geometry.DoesIntersect@Autodesk.DesignScript.Geometry.Geometry", "inputs": ["geometry", "entity"], "outputs": ["bool"], "creationName": "Autodesk.DesignScript.Geometry.Geometry.DoesIntersect@Autodesk.DesignScript.Geometry.Geometry", "nodeName": "Geometry.DoesIntersect", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "CoreNodeModels.CreateList": {"create": "CoreNodeModels.CreateList", "inputs": ["item0"], "outputs": ["list"], "nodeName": "List Create", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "DSCore.List.CountTrue@var[]..[]": {"create": "DSCore.List.CountTrue@var[]..[]", "inputs": ["list"], "outputs": ["int"], "creationName": "DSCore.List.CountTrue@var[]..[]", "nodeName": "List.CountTrue", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "<@var[]..[],var[]..[]": {"create": "<@var[]..[],var[]..[]", "inputs": ["x", "y"], "outputs": ["bool"], "creationName": "<@var[]..[],var[]..[]", "nodeName": "<", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Not@var[]..[]": {"create": "Not@var[]..[]", "inputs": ["x"], "outputs": ["bool"], "creationName": "Not@var[]..[]", "nodeName": "Not", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Line.Direction": {"create": "Autodesk.DesignScript.Geometry.Line.Direction", "inputs": ["line"], "outputs": ["Vector"], "creationName": "Autodesk.DesignScript.Geometry.Line.Direction", "nodeName": "Line.Direction", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Line.ByStartPointDirectionLength@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Vector,double": {"create": "Autodesk.DesignScript.Geometry.Line.ByStartPointDirectionLength@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Vector,double", "inputs": ["startPoint", "direction", "length"], "outputs": ["Line"], "creationName": "Autodesk.DesignScript.Geometry.Line.ByStartPointDirectionLength@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Vector,double", "nodeName": "Line.ByStartPointDirectionLength", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Vector.Reverse": {"create": "Autodesk.DesignScript.Geometry.Vector.Reverse", "inputs": ["vector"], "outputs": ["Vector"], "creationName": "Autodesk.DesignScript.Geometry.Vector.Reverse", "nodeName": "Vector.Reverse", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Curve.EndPoint": {"create": "Autodesk.DesignScript.Geometry.Curve.EndPoint", "inputs": ["curve"], "outputs": ["Point"], "creationName": "Autodesk.DesignScript.Geometry.Curve.EndPoint", "nodeName": "Curve.EndPoint", "status": "auto-verified", "verified": "unknown (2026-10-13)"},
+    "Autodesk.DesignScript.Geometry.Curve.PointAtParameter@double": {"create": "Autodesk.DesignScript.Geometry.Curve.PointAtParameter@double", "inputs": ["curve", "param"], "outputs": ["Point"], "creationName": "Autodesk.DesignScript.Geometry.Curve.PointAtParameter@double", "nodeName": "Curve.PointAtParameter", "status": "auto-verified", "verified": "unknown (2026-10-13)"}
   },
   "patterns": {
     "表格匯出 Excel": "表頭 Code Block [\"欄1\",\"欄2\"] + 資料列 → List.AddItemToFront(item=表頭, list=資料列) → Data.ExportExcel(data)。多欄資料列可用 Code Block: DSCore.List.Transpose([a, b, c]);",
@@ -736,6 +760,1162 @@
       ],
       "status": "verified",
       "verified": "Dynamo 2.6 / Revit 2021 (2026-10-08)"
+    },
+    "依副檔名取得目錄檔案清單": {
+      "description": "由 Directory Path 取得目錄物件，並以特定副檔名（如 *.rvt）取得資料夾內檔案清單",
+      "keywords": [
+        "目錄",
+        "資料夾",
+        "副檔名",
+        "檔案清單",
+        "Directory",
+        "FileSystem",
+        "GetDirectoryContents"
+      ],
+      "nodes": [
+        {
+          "ref": "corenodemodels_input_directory",
+          "name": "CoreNodeModels.Input.Directory",
+          "value": "C:\\Users\\lu\\Downloads\\DynamoAutomation-master\\samples\\1.x\\revit_models\\dir1",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_input_directoryobject",
+          "name": "CoreNodeModels.Input.DirectoryObject",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 564,
+          "y": 56
+        },
+        {
+          "ref": "dscore_io_filesystem_getdirectorycontents_var_string_bool",
+          "name": "DSCore.IO.FileSystem.GetDirectoryContents@var,string,bool",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 940,
+          "y": 137
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "\"*.rvt\";",
+          "x": 598,
+          "y": 288
+        }
+      ],
+      "connectors": [
+        {
+          "from": "corenodemodels_input_directory",
+          "fromPort": 0,
+          "to": "corenodemodels_input_directoryobject",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_directoryobject",
+          "fromPort": 0,
+          "to": "dscore_io_filesystem_getdirectorycontents_var_string_bool",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "dscore_io_filesystem_getdirectorycontents_var_string_bool",
+          "toPort": 1
+        }
+      ],
+      "gotchas": [
+        "輸入路徑需為有效目錄",
+        "副檔名格式如 *.rvt 或 *.*"
+      ],
+      "status": "captured"
+    },
+    "清單流水號檔名生成器": {
+      "description": "計算清單數量生成 1..n 流水號，並與目錄、分隔符號及前綴字串組裝為序列檔名",
+      "keywords": [
+        "流水號",
+        "檔名",
+        "序列",
+        "List.Count",
+        "Code Block",
+        "String",
+        "String from Object"
+      ],
+      "nodes": [
+        {
+          "ref": "list_count",
+          "name": "List.Count",
+          "x": 1650,
+          "y": 223
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "// Create file names for journal files\njdir + delimiter + jfilename + \"_\" + n + \".txt\";",
+          "x": 2319,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_fromobject",
+          "name": "CoreNodeModels.FromObject",
+          "x": 2173,
+          "y": 307
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "1..n;",
+          "x": 1880,
+          "y": 322
+        },
+        {
+          "ref": "corenodemodels_input_directory",
+          "name": "CoreNodeModels.Input.Directory",
+          "value": "C:\\Users\\lu\\Downloads\\DynamoAutomation-master\\samples\\1.x\\output",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 6,
+          "y": 617
+        },
+        {
+          "ref": "corenodemodels_input_stringinput",
+          "name": "CoreNodeModels.Input.StringInput",
+          "value": "DynamoJournalFile",
+          "x": 0,
+          "y": 782
+        },
+        {
+          "ref": "corenodemodels_input_stringinput2",
+          "name": "CoreNodeModels.Input.StringInput",
+          "value": "\\",
+          "x": 2103,
+          "y": 120
+        }
+      ],
+      "connectors": [
+        {
+          "from": "list_count",
+          "fromPort": 0,
+          "to": "code_block2",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_fromobject",
+          "fromPort": 0,
+          "to": "code_block",
+          "toPort": 3
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "corenodemodels_fromobject",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_directory",
+          "fromPort": 0,
+          "to": "code_block",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_stringinput",
+          "fromPort": 0,
+          "to": "code_block",
+          "toPort": 2
+        },
+        {
+          "from": "corenodemodels_input_stringinput2",
+          "fromPort": 0,
+          "to": "code_block",
+          "toPort": 1
+        }
+      ],
+      "gotchas": [
+        "外部需連接清單至 List.Count 輸入埠",
+        "模式外輸入: List.Count[0] ← FileSystem.GetDirectoryContents（模式外的節點）"
+      ],
+      "status": "captured"
+    },
+    "檔案複製與順序防競態模式": {
+      "description": "將檔案路徑變更至目標目錄後複製檔案，並透過 Passthrough 確保複製完成才向下游傳遞路徑",
+      "keywords": [
+        "檔案複製",
+        "Passthrough",
+        "DirectoryName",
+        "String.Replace",
+        "CopyFile",
+        "檔案順序"
+      ],
+      "nodes": [
+        {
+          "ref": "dscore_io_filesystem_copyfile_var_string_bool",
+          "name": "DSCore.IO.FileSystem.CopyFile@var,string,bool",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 784,
+          "y": 319
+        },
+        {
+          "ref": "dscore_io_filesystem_directoryname_string",
+          "name": "DSCore.IO.FileSystem.DirectoryName@string",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 0,
+          "y": 417
+        },
+        {
+          "ref": "string_replace",
+          "name": "String.Replace",
+          "x": 299,
+          "y": 154
+        },
+        {
+          "ref": "corenodemodels_input_fileobject",
+          "name": "CoreNodeModels.Input.FileObject",
+          "x": 522,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_input_boolselector",
+          "name": "CoreNodeModels.Input.BoolSelector",
+          "value": "true",
+          "x": 416,
+          "y": 420
+        },
+        {
+          "ref": "ecce77dc_1290_438e_a056_970b256fd553",
+          "name": "ecce77dc-1290-438e-a056-970b256fd553",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1094,
+          "y": 238
+        }
+      ],
+      "connectors": [
+        {
+          "from": "dscore_io_filesystem_copyfile_var_string_bool",
+          "fromPort": 0,
+          "to": "ecce77dc_1290_438e_a056_970b256fd553",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_io_filesystem_directoryname_string",
+          "fromPort": 0,
+          "to": "string_replace",
+          "toPort": 1
+        },
+        {
+          "from": "string_replace",
+          "fromPort": 0,
+          "to": "dscore_io_filesystem_copyfile_var_string_bool",
+          "toPort": 1
+        },
+        {
+          "from": "string_replace",
+          "fromPort": 0,
+          "to": "ecce77dc_1290_438e_a056_970b256fd553",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_fileobject",
+          "fromPort": 0,
+          "to": "dscore_io_filesystem_copyfile_var_string_bool",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_boolselector",
+          "fromPort": 0,
+          "to": "dscore_io_filesystem_copyfile_var_string_bool",
+          "toPort": 2
+        }
+      ],
+      "gotchas": [
+        "Passthrough 節點若環境未安裝可改用 Code Block [x, wait][0]; 替代",
+        "模式外輸入: FileSystem.DirectoryName[0] ← FileSystem.GetDirectoryContents（模式外的節點）",
+        "模式外輸入: String.Replace[0] ← FileSystem.GetDirectoryContents（模式外的節點）",
+        "模式外輸入: File.FromPath[0] ← FileSystem.GetDirectoryContents（模式外的節點）",
+        "模式外輸入: String.Replace[2] ← Directory Path (Journal Files)（模式外的節點）"
+      ],
+      "status": "captured"
+    },
+    "Revit 版本執行檔路徑取得": {
+      "description": "依指定的 Revit 年份版本（如 2026），取得該版本的 revit.exe 完整路徑",
+      "keywords": [
+        "RevitExecutablePath",
+        "版本路徑",
+        "revit.exe",
+        "年份",
+        "DynamoAutomation"
+      ],
+      "nodes": [
+        {
+          "ref": "46ad09be_4c19_4881_b316_6cd5424bad02",
+          "name": "46ad09be-4c19-4881-b316-6cd5424bad02",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 3081,
+          "y": 275
+        },
+        {
+          "ref": "corenodemodels_input_integerslider64bit",
+          "name": "CoreNodeModels.Input.IntegerSlider64Bit",
+          "value": "2026",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "corenodemodels_fromobject",
+          "name": "CoreNodeModels.FromObject",
+          "x": 600,
+          "y": 120
+        }
+      ],
+      "connectors": [
+        {
+          "from": "corenodemodels_input_integerslider64bit",
+          "fromPort": 0,
+          "to": "corenodemodels_fromobject",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_fromobject",
+          "fromPort": 0,
+          "to": "46ad09be_4c19_4881_b316_6cd5424bad02",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "RevitExecutablePath.ByVersion 為 DynamoAutomation 套件 Custom Node"
+      ],
+      "status": "captured"
+    },
+    "OpenXML Excel 讀取與幾何生成": {
+      "description": "使用 OpenXML 從 Excel 讀取資料表（無需安裝 Excel），轉置資料並依欄位索引提取 X、Y、Z 座標建立 3D 點。",
+      "keywords": [
+        "OpenXML",
+        "XML",
+        "Excel",
+        "讀取",
+        "匯入",
+        "Point.ByCoordinates",
+        "座標"
+      ],
+      "nodes": [
+        {
+          "ref": "corenodemodels_input_filename",
+          "name": "CoreNodeModels.Input.Filename",
+          "value": "..\\..\\Data\\helix.xlsx",
+          "x": 0,
+          "y": 154
+        },
+        {
+          "ref": "corenodemodels_input_stringinput",
+          "name": "CoreNodeModels.Input.StringInput",
+          "value": "helix",
+          "x": 0,
+          "y": 310
+        },
+        {
+          "ref": "dscore_list_transpose_var",
+          "name": "DSCore.List.Transpose@var[]..[]",
+          "x": 753,
+          "y": 199
+        },
+        {
+          "ref": "list_getitematindex",
+          "name": "List.GetItemAtIndex",
+          "x": 1150,
+          "y": 26
+        },
+        {
+          "ref": "corenodemodels_input_doubleinput",
+          "name": "CoreNodeModels.Input.DoubleInput",
+          "value": "0.0",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 767,
+          "y": 0
+        },
+        {
+          "ref": "list_getitematindex2",
+          "name": "List.GetItemAtIndex",
+          "x": 1142,
+          "y": 250
+        },
+        {
+          "ref": "corenodemodels_input_doubleinput2",
+          "name": "CoreNodeModels.Input.DoubleInput",
+          "value": "1.0",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 753,
+          "y": 388
+        },
+        {
+          "ref": "list_getitematindex3",
+          "name": "List.GetItemAtIndex",
+          "x": 1151,
+          "y": 469
+        },
+        {
+          "ref": "corenodemodels_input_doubleinput3",
+          "name": "CoreNodeModels.Input.DoubleInput",
+          "value": "2.0",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 750,
+          "y": 586
+        },
+        {
+          "ref": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "name": "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1473,
+          "y": 209
+        },
+        {
+          "ref": "dsoffice_data_openxmlimportexcel_string_string_int_int_bool",
+          "name": "DSOffice.Data.OpenXMLImportExcel@string,string,int,int,bool",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 303,
+          "y": 202
+        }
+      ],
+      "connectors": [
+        {
+          "from": "corenodemodels_input_filename",
+          "fromPort": 0,
+          "to": "dsoffice_data_openxmlimportexcel_string_string_int_int_bool",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_stringinput",
+          "fromPort": 0,
+          "to": "dsoffice_data_openxmlimportexcel_string_string_int_int_bool",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "list_getitematindex",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "list_getitematindex2",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "list_getitematindex3",
+          "toPort": 0
+        },
+        {
+          "from": "list_getitematindex",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_input_doubleinput",
+          "fromPort": 0,
+          "to": "list_getitematindex",
+          "toPort": 1
+        },
+        {
+          "from": "list_getitematindex2",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "toPort": 1
+        },
+        {
+          "from": "corenodemodels_input_doubleinput2",
+          "fromPort": 0,
+          "to": "list_getitematindex2",
+          "toPort": 1
+        },
+        {
+          "from": "list_getitematindex3",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "toPort": 2
+        },
+        {
+          "from": "corenodemodels_input_doubleinput3",
+          "fromPort": 0,
+          "to": "list_getitematindex3",
+          "toPort": 1
+        },
+        {
+          "from": "dsoffice_data_openxmlimportexcel_string_string_int_int_bool",
+          "fromPort": 0,
+          "to": "dscore_list_transpose_var",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "OpenXML 讀取無需電腦安裝 Microsoft Excel",
+        "相對路徑是相對於 .dyn 檔案所在目錄",
+        "List.Transpose 將橫列轉為直欄後，以 List.GetItemAtIndex (0, 1, 2) 分別取出 X, Y, Z"
+      ],
+      "status": "captured"
+    },
+    "OpenXML Excel 幾何資料匯出": {
+      "description": "由 3D 點幾何萃取 X、Y、Z 座標，經 Code Block 與 List.Transpose 組裝為二維表格資料，使用 OpenXML 匯出至 Excel 檔案（無需安裝 Excel）。",
+      "keywords": [
+        "OpenXML",
+        "XML",
+        "Excel",
+        "匯出",
+        "ExportExcel",
+        "Data.OpenXMLExportExcel",
+        "Point",
+        "幾何匯出"
+      ],
+      "nodes": [
+        {
+          "ref": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "name": "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1195,
+          "y": 359
+        },
+        {
+          "ref": "dscore_math_cos_double",
+          "name": "DSCore.Math.Cos@double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 899,
+          "y": 217
+        },
+        {
+          "ref": "dscore_math_sin_double",
+          "name": "DSCore.Math.Sin@double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 904,
+          "y": 411
+        },
+        {
+          "ref": "corenodemodels_input_stringinput",
+          "name": "CoreNodeModels.Input.StringInput",
+          "value": "helix",
+          "x": 1872,
+          "y": 202
+        },
+        {
+          "ref": "corenodemodels_input_doubleinput",
+          "name": "CoreNodeModels.Input.DoubleInput",
+          "value": "0.0",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 1911,
+          "y": 604
+        },
+        {
+          "ref": "corenodemodels_input_filename",
+          "name": "CoreNodeModels.Input.Filename",
+          "value": "..\\..\\Data\\icosohedron_points.xlsx",
+          "x": 1874,
+          "y": 0
+        },
+        {
+          "ref": "dscore_list_transpose_var",
+          "name": "DSCore.List.Transpose@var[]..[]",
+          "x": 1885,
+          "y": 398
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "[pt.X,pt.Y,pt.Z];",
+          "x": 1494,
+          "y": 377
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "0..(360*numCircles)..10;",
+          "x": 448,
+          "y": 410
+        },
+        {
+          "ref": "code_block3",
+          "name": "Code Block",
+          "value": "x/100;",
+          "x": 930,
+          "y": 607
+        },
+        {
+          "ref": "corenodemodels_input_doubleslider",
+          "name": "CoreNodeModels.Input.DoubleSlider",
+          "value": "1.7",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 0,
+          "y": 410
+        },
+        {
+          "ref": "data_openxmlexportexcel",
+          "name": "Data.OpenXMLExportExcel",
+          "x": 2325,
+          "y": 223
+        }
+      ],
+      "connectors": [
+        {
+          "from": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "fromPort": 0,
+          "to": "code_block",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_math_cos_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_math_sin_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "toPort": 1
+        },
+        {
+          "from": "corenodemodels_input_stringinput",
+          "fromPort": 0,
+          "to": "data_openxmlexportexcel",
+          "toPort": 1
+        },
+        {
+          "from": "corenodemodels_input_doubleinput",
+          "fromPort": 0,
+          "to": "data_openxmlexportexcel",
+          "toPort": 3
+        },
+        {
+          "from": "corenodemodels_input_doubleinput",
+          "fromPort": 0,
+          "to": "data_openxmlexportexcel",
+          "toPort": 4
+        },
+        {
+          "from": "corenodemodels_input_filename",
+          "fromPort": 0,
+          "to": "data_openxmlexportexcel",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_transpose_var",
+          "fromPort": 0,
+          "to": "data_openxmlexportexcel",
+          "toPort": 2
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "dscore_list_transpose_var",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "dscore_math_sin_double",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "dscore_math_cos_double",
+          "toPort": 0
+        },
+        {
+          "from": "code_block2",
+          "fromPort": 0,
+          "to": "code_block3",
+          "toPort": 0
+        },
+        {
+          "from": "code_block3",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_point_bycoordinates_double_double_double",
+          "toPort": 2
+        },
+        {
+          "from": "corenodemodels_input_doubleslider",
+          "fromPort": 0,
+          "to": "code_block2",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "無需安裝 Microsoft Excel 即可產生/寫入 .xlsx 檔案",
+        "相對路徑是相對於 .dyn 檔案所在目錄",
+        "data 需為二維清單（列為單位），overWrite 預設為 false"
+      ],
+      "status": "captured"
+    },
+    "幾何實體提取水平頂面": {
+      "description": "將幾何實體炸開為曲面群，藉由計算各面中心法向量與正 Z 軸 (0,0,1) 的相似度，過濾並取得所有朝上的水平頂面(Top Face)。常用於各類實體幾何之上表面提取與面分析。",
+      "keywords": [
+        "頂面",
+        "法向量",
+        "樓板頂面",
+        "Solid",
+        "Surface",
+        "NormalAtParameter",
+        "ZAxis"
+      ],
+      "nodes": [
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "0.5;",
+          "x": 1316,
+          "y": 709
+        },
+        {
+          "ref": "autodesk_designscript_geometry_vector_normalized",
+          "name": "Autodesk.DesignScript.Geometry.Vector.Normalized",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1834,
+          "y": 727
+        },
+        {
+          "ref": "autodesk_designscript_geometry_surface_normalatparameter_double_double",
+          "name": "Autodesk.DesignScript.Geometry.Surface.NormalAtParameter@double,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1513,
+          "y": 731
+        },
+        {
+          "ref": "autodesk_designscript_geometry_vector_isalmostequalto_autodesk_designscript_geometry_vector",
+          "name": "Autodesk.DesignScript.Geometry.Vector.IsAlmostEqualTo@Autodesk.DesignScript.Geometry.Vector",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 2163,
+          "y": 764
+        },
+        {
+          "ref": "autodesk_designscript_geometry_vector_zaxis",
+          "name": "Autodesk.DesignScript.Geometry.Vector.ZAxis",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 1955,
+          "y": 861
+        },
+        {
+          "ref": "list_filterbyboolmask",
+          "name": "List.FilterByBoolMask",
+          "x": 2555,
+          "y": 638
+        },
+        {
+          "ref": "dscore_list_flatten_var_int",
+          "name": "DSCore.List.Flatten@var[]..[],int",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 2808,
+          "y": 759
+        },
+        {
+          "ref": "autodesk_designscript_geometry_geometry_explode",
+          "name": "Autodesk.DesignScript.Geometry.Geometry.Explode",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "dscore_list_flatten_var_int2",
+          "name": "DSCore.List.Flatten@var[]..[],int",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 441,
+          "y": 22
+        }
+      ],
+      "connectors": [
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_surface_normalatparameter_double_double",
+          "toPort": 1
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_surface_normalatparameter_double_double",
+          "toPort": 2
+        },
+        {
+          "from": "autodesk_designscript_geometry_vector_normalized",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_vector_isalmostequalto_autodesk_designscript_geometry_vector",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_surface_normalatparameter_double_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_vector_normalized",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_vector_isalmostequalto_autodesk_designscript_geometry_vector",
+          "fromPort": 0,
+          "to": "list_filterbyboolmask",
+          "toPort": 1
+        },
+        {
+          "from": "autodesk_designscript_geometry_vector_zaxis",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_vector_isalmostequalto_autodesk_designscript_geometry_vector",
+          "toPort": 1
+        },
+        {
+          "from": "list_filterbyboolmask",
+          "fromPort": 0,
+          "to": "dscore_list_flatten_var_int",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_geometry_explode",
+          "fromPort": 0,
+          "to": "dscore_list_flatten_var_int2",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_flatten_var_int2",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_surface_normalatparameter_double_double",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_flatten_var_int2",
+          "fromPort": 0,
+          "to": "list_filterbyboolmask",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "模式外輸入: Geometry.Explode[0] ← Solid.DifferenceAll（模式外的節點）"
+      ],
+      "status": "captured"
+    },
+    "線段自中心點雙向等長延伸": {
+      "description": "取線段中心點與方向向量，向正向與反向各延伸指定長度，再連成兩側對稱延伸之直線。常用於分析線或參考線在幾何切割與網格延伸時確保完全穿透目標邊界。",
+      "keywords": [
+        "線段延伸",
+        "雙向延伸",
+        "分析線",
+        "方向向量",
+        "Line.Direction",
+        "ByStartPointDirectionLength"
+      ],
+      "nodes": [
+        {
+          "ref": "autodesk_designscript_geometry_line_direction",
+          "name": "Autodesk.DesignScript.Geometry.Line.Direction",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 0,
+          "y": 132
+        },
+        {
+          "ref": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "name": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point",
+          "x": 1258,
+          "y": 212
+        },
+        {
+          "ref": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double",
+          "name": "Autodesk.DesignScript.Geometry.Line.ByStartPointDirectionLength@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Vector,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 602,
+          "y": 385
+        },
+        {
+          "ref": "autodesk_designscript_geometry_vector_reverse",
+          "name": "Autodesk.DesignScript.Geometry.Vector.Reverse",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 263,
+          "y": 223
+        },
+        {
+          "ref": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double2",
+          "name": "Autodesk.DesignScript.Geometry.Line.ByStartPointDirectionLength@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Vector,double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 711,
+          "y": 129
+        },
+        {
+          "ref": "autodesk_designscript_geometry_curve_endpoint",
+          "name": "Autodesk.DesignScript.Geometry.Curve.EndPoint",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 968,
+          "y": 181
+        },
+        {
+          "ref": "autodesk_designscript_geometry_curve_endpoint2",
+          "name": "Autodesk.DesignScript.Geometry.Curve.EndPoint",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 951,
+          "y": 400
+        },
+        {
+          "ref": "autodesk_designscript_geometry_curve_pointatparameter_double",
+          "name": "Autodesk.DesignScript.Geometry.Curve.PointAtParameter@double",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 390,
+          "y": 0
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "0.5;",
+          "x": 293,
+          "y": 79
+        }
+      ],
+      "connectors": [
+        {
+          "from": "autodesk_designscript_geometry_line_direction",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_vector_reverse",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_line_direction",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double2",
+          "toPort": 1
+        },
+        {
+          "from": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_curve_endpoint2",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_vector_reverse",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double",
+          "toPort": 1
+        },
+        {
+          "from": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double2",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_curve_endpoint",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_curve_endpoint",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_curve_endpoint2",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointendpoint_autodesk_designscript_geometry_point_autodesk_designscript_geometry_point",
+          "toPort": 1
+        },
+        {
+          "from": "autodesk_designscript_geometry_curve_pointatparameter_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double2",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_curve_pointatparameter_double",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_line_bystartpointdirectionlength_autodesk_designscript_geometry_point_autodesk_designscript_geometry_vector_double",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_curve_pointatparameter_double",
+          "toPort": 1
+        }
+      ],
+      "gotchas": [
+        "模式外輸入: Curve.PointAtParameter[0] ← List.FilterByBoolMask（模式外的節點）",
+        "模式外輸入: Line.ByStartPointDirectionLength[2] ← +（模式外的節點）",
+        "模式外輸入: Line.ByStartPointDirectionLength[2] ← +（模式外的節點）",
+        "模式外輸入: Line.Direction[0] ← Line.ByStartPointEndPoint（模式外的節點）"
+      ],
+      "status": "captured"
+    },
+    "多曲線連續切割曲面演算法": {
+      "description": "使用 DesignScript Imperative 迴圈與拉伸薄體技術，將曲線清單逐一迭代切割目標曲面。解決 Dynamo 原生無法一次以多曲線分割曲面的限制。",
+      "keywords": [
+        "曲面切割",
+        "Surface.Split",
+        "DesignScript",
+        "迭代切割",
+        "樓板分割",
+        "Loft"
+      ],
+      "nodes": [
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "def SurfaceSplit(sur,iso1){\ndir=sur.NormalAtParameter(0.5,0.5);\nMnmPt=(Autodesk.BoundingBox.ByGeometry(sur).MinPoint);\nMxmPt=(Autodesk.BoundingBox.ByGeometry(sur).MaxPoint);\nMnmPl=(Plane.ByOriginNormal(MnmPt,dir)).Translate(dir,-1);\nMxmPl=(Plane.ByOriginNormal(MxmPt,dir)).Translate(dir,1);\n\n//Creating the cutting tool\niso1Mxm=DSCore.List.Flatten(iso1.PullOntoPlane(MxmPl));\niso1Mnm=DSCore.List.Flatten(iso1.PullOntoPlane(MnmPl));\n\nsur1=Surface.ByLoft(DSCore.List.Transpose([iso1Mnm,iso1Mxm]));\nsur111=PolySurface.ByJoinedSurfaces(Flatten(sur1));\n\nDivs1=sur.Split(sur111);\nreturn Divs1;\n};",
+          "x": 418,
+          "y": 714
+        },
+        {
+          "ref": "code_block2",
+          "name": "Code Block",
+          "value": "def splitsurface(surface:var[],curves:var[]){\nreturn = [Imperative]\n{\ncnt = List.Count(curves);\nind = 1..cnt-1..1;\n\ns = SurfaceSplit(surface,curves[0]);\nfor (i in ind)\n{\n\ts = SurfaceSplit(s,curves[i]);\n}\nreturn = s;\n}};",
+          "x": 0,
+          "y": 717
+        },
+        {
+          "ref": "code_block3",
+          "name": "Code Block",
+          "value": "splitsurface(a,b);",
+          "x": 289,
+          "y": 0
+        },
+        {
+          "ref": "dscore_list_flatten_var_int",
+          "name": "DSCore.List.Flatten@var[]..[],int",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 541,
+          "y": 33
+        }
+      ],
+      "connectors": [
+        {
+          "from": "code_block3",
+          "fromPort": 0,
+          "to": "dscore_list_flatten_var_int",
+          "toPort": 0
+        }
+      ],
+      "gotchas": [
+        "模式外輸入: Code Block[1] ← Line.ByStartPointEndPoint（模式外的節點）",
+        "模式外輸入: Code Block[0] ← List.Flatten（模式外的節點）"
+      ],
+      "status": "captured"
+    },
+    "曲面周長邊界與線段相交檢測篩選": {
+      "description": "取得曲面之外圍周長曲線群，與傳入之線段進行相交判定(DoesIntersect)與計數(CountTrue)，過濾出完全穿透曲面邊界之有效切割線。",
+      "keywords": [
+        "周長曲線",
+        "邊界相交",
+        "PerimeterCurves",
+        "DoesIntersect",
+        "CountTrue",
+        "有效切割線"
+      ],
+      "nodes": [
+        {
+          "ref": "autodesk_designscript_geometry_surface_perimetercurves",
+          "name": "Autodesk.DesignScript.Geometry.Surface.PerimeterCurves",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "ref": "autodesk_designscript_geometry_geometry_doesintersect_autodesk_designscript_geometry_geometry",
+          "name": "Autodesk.DesignScript.Geometry.Geometry.DoesIntersect@Autodesk.DesignScript.Geometry.Geometry",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 222,
+          "y": 398
+        },
+        {
+          "ref": "corenodemodels_createlist",
+          "name": "CoreNodeModels.CreateList",
+          "note": "create 名稱來自 className，尚未驗證",
+          "x": 256,
+          "y": 138
+        },
+        {
+          "ref": "dscore_list_flatten_var_int",
+          "name": "DSCore.List.Flatten@var[]..[],int",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 431,
+          "y": 166
+        },
+        {
+          "ref": "list_filterbyboolmask",
+          "name": "List.FilterByBoolMask",
+          "x": 1052,
+          "y": 345
+        },
+        {
+          "ref": "dscore_list_counttrue_var",
+          "name": "DSCore.List.CountTrue@var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 518,
+          "y": 544
+        },
+        {
+          "ref": "var_var",
+          "name": "<@var[]..[],var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 718,
+          "y": 580
+        },
+        {
+          "ref": "code_block",
+          "name": "Code Block",
+          "value": "3;",
+          "x": 580,
+          "y": 641
+        },
+        {
+          "ref": "not_var",
+          "name": "Not@var[]..[]",
+          "note": "create 名稱來自 creationName，尚未驗證",
+          "x": 932,
+          "y": 579
+        }
+      ],
+      "connectors": [
+        {
+          "from": "autodesk_designscript_geometry_surface_perimetercurves",
+          "fromPort": 0,
+          "to": "corenodemodels_createlist",
+          "toPort": 0
+        },
+        {
+          "from": "autodesk_designscript_geometry_geometry_doesintersect_autodesk_designscript_geometry_geometry",
+          "fromPort": 0,
+          "to": "dscore_list_counttrue_var",
+          "toPort": 0
+        },
+        {
+          "from": "corenodemodels_createlist",
+          "fromPort": 0,
+          "to": "dscore_list_flatten_var_int",
+          "toPort": 0
+        },
+        {
+          "from": "dscore_list_flatten_var_int",
+          "fromPort": 0,
+          "to": "autodesk_designscript_geometry_geometry_doesintersect_autodesk_designscript_geometry_geometry",
+          "toPort": 1
+        },
+        {
+          "from": "dscore_list_counttrue_var",
+          "fromPort": 0,
+          "to": "var_var",
+          "toPort": 0
+        },
+        {
+          "from": "var_var",
+          "fromPort": 0,
+          "to": "not_var",
+          "toPort": 0
+        },
+        {
+          "from": "code_block",
+          "fromPort": 0,
+          "to": "var_var",
+          "toPort": 1
+        },
+        {
+          "from": "not_var",
+          "fromPort": 0,
+          "to": "list_filterbyboolmask",
+          "toPort": 1
+        }
+      ],
+      "gotchas": [
+        "模式外輸入: List Create[1] ← Line.ByStartPointEndPoint（模式外的節點）",
+        "模式外輸入: Geometry.DoesIntersect[0] ← Line.ByStartPointEndPoint（模式外的節點）",
+        "模式外輸入: List.FilterByBoolMask[0] ← Line.ByStartPointEndPoint（模式外的節點）",
+        "模式外輸入: Surface.PerimeterCurves[0] ← List.Flatten（模式外的節點）"
+      ],
+      "status": "captured"
     }
   }
 }
