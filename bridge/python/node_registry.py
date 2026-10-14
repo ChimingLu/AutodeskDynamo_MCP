@@ -494,8 +494,45 @@ def search_patterns(query: str, path: str = None, reg: dict = None, limit: int =
     return scored if not q else scored[:limit]
 
 
+PACKAGE_GROUP_COLOR = "#FFFFB74D"
+
+
+def package_reminder(pattern: dict) -> Optional[str]:
+    """模式需要外掛套件時回傳提醒文字（例「⚠ 需安裝外掛：Clockwork for Dynamo 2.x、archi-lab.net」），否則 None。"""
+    pkgs = [p.get("name") for p in (pattern or {}).get("packages") or [] if p.get("name")]
+    return f"⚠ 需安裝外掛：{'、'.join(pkgs)}" if pkgs else None
+
+
+def _package_details(pattern: dict) -> str:
+    parts = []
+    for p in pattern.get("packages") or []:
+        ver = f" {p['version']}" if p.get("version") else ""
+        nodes = f"（{', '.join(p['nodes'])}）" if p.get("nodes") else ""
+        parts.append(f"{p.get('name')}{ver}{nodes}")
+    return "；".join(parts)
+
+
+def packages_from_dyn(dyn: dict, node_ids) -> List[dict]:
+    """由 .dyn 的 NodeLibraryDependencies 找出這些節點用到的外掛套件：[{name, version, nodes: [顯示名稱]}]。"""
+    wanted = {_plain_id(i) for i in node_ids}
+    names = {_plain_id(v.get("Id")): v.get("Name") for v in ((dyn or {}).get("View") or {}).get("NodeViews") or []}
+    out = []
+    for dep in (dyn or {}).get("NodeLibraryDependencies") or []:
+        if dep.get("ReferenceType") != "Package":
+            continue
+        used = [i for i in (_plain_id(n) for n in dep.get("Nodes") or []) if i in wanted]
+        if used:
+            entry = {"name": dep.get("Name"), "version": dep.get("Version")}
+            entry["nodes"] = sorted({names.get(i) or i for i in used})
+            out.append({k: v for k, v in entry.items() if v})
+    return out
+
+
 def instantiate_pattern(pattern: dict, base_x: float = 0, base_y: float = 0, id_factory=None) -> dict:
-    """產生可直接送 execute_dynamo_instructions 的 JSON（每次新 GUID）。回傳 {"instructions", "ids": {ref: guid}}。"""
+    """
+    產生可直接送 execute_dynamo_instructions 的 JSON（每次新 GUID）。回傳 {"instructions", "ids": {ref: guid}}。
+    模式需要外掛套件時，instructions 會帶 "groups"：放置後自動以提醒標題框住整個模式。
+    """
     import uuid
     id_factory = id_factory or (lambda: str(uuid.uuid4()))
     ids = {}
@@ -513,7 +550,12 @@ def instantiate_pattern(pattern: dict, base_x: float = 0, base_y: float = 0, id_
         if c.get("from") in ids and c.get("to") in ids:
             connectors.append({"from": ids[c["from"]], "fromPort": c.get("fromPort", 0),
                                "to": ids[c["to"]], "toPort": c.get("toPort", 0)})
-    return {"instructions": {"nodes": nodes, "connectors": connectors}, "ids": ids}
+    instructions = {"nodes": nodes, "connectors": connectors}
+    reminder = package_reminder(pattern)
+    if reminder:
+        instructions["groups"] = [{"title": reminder, "description": f"本模式使用外掛節點：{_package_details(pattern)}",
+                                   "color": PACKAGE_GROUP_COLOR, "nodeIds": [n["id"] for n in nodes]}]
+    return {"instructions": instructions, "ids": ids}
 
 
 def format_patterns(matches: List[tuple], base_x: float = 0, base_y: float = 0) -> str:
@@ -525,6 +567,9 @@ def format_patterns(matches: List[tuple], base_x: float = 0, base_y: float = 0) 
         if not is_structured_pattern(pattern):
             lines.append(pattern if isinstance(pattern, str) else json.dumps(pattern, ensure_ascii=False))
             continue
+        if package_reminder(pattern):
+            lines.append(f"{package_reminder(pattern)}（{_package_details(pattern)}）——放置前請確認已安裝；"
+                         "instructions 內的 groups 會在放置後自動以此提醒框住模式")
         if pattern.get("description"):
             lines.append(pattern["description"])
         refs = {n["ref"]: n for n in pattern["nodes"]}
@@ -603,9 +648,14 @@ def read_dyn_values(dyn: dict) -> Dict[str, dict]:
         elif "PythonNode" in ctype and "Code" in n:
             v["pythonCode"] = n["Code"]
             v["inputCount"] = len(n.get("Inputs") or [])
+        elif "CoreNodeModels.CreateList" in ctype:
+            v["inputCount"] = len(n.get("Inputs") or [])
         elif "InputValue" in n:
             val = n["InputValue"]
-            v["value"] = str(val).lower() if isinstance(val, bool) else str(val)
+            if isinstance(val, dict) and {"R", "G", "B"} <= set(val):  # Color Palette
+                v["value"] = ",".join(str(val.get(k, 255)) for k in ("R", "G", "B", "A"))
+            else:
+                v["value"] = str(val).lower() if isinstance(val, bool) else str(val)
         elif "SelectedIndex" in n:
             v["value"] = str(n["SelectedIndex"])
         if v:
@@ -663,6 +713,8 @@ def build_pattern_from_workspace(graph_nodes: list, graph_connectors: list, node
         has_inputs = bool((ports.get(gid) or {}).get("inputs"))
         needs_value = any(t in full for t in ("CodeBlockNodeModel", "PythonNode")) or \
             (not has_inputs and (".Input." in full or full.startswith("DSRevitNodesUI.")))
+        if needs_value and dyn is not None and full.startswith("DSRevitNodesUI.") and _plain_id(gid) not in values:
+            needs_value = False  # .dyn 中本來就沒有值的 UI 節點（例 All Elements In Active View）
         if needs_value and not any(k in node for k in ("value", "pythonCode")):
             node["note"] = "值未擷取（MCP 讀不到節點值；存檔後再擷取，或手動補 value/pythonCode）"
             warnings.append(f"{g.get('name')}: 未取得值，需手動補上")
@@ -685,7 +737,8 @@ def build_pattern_from_workspace(graph_nodes: list, graph_connectors: list, node
     if missing:
         warnings.append(f"{len(missing)} 個 id 不在工作區: {', '.join(sorted(missing))}")
     return {"instructions": {"nodes": nodes, "connectors": connectors}, "sources": sources,
-            "warnings": warnings, "externalInputs": external}
+            "warnings": warnings, "externalInputs": external,
+            "packages": packages_from_dyn(dyn, present) if dyn else []}
 
 
 def mark_pattern_verified(name: str, dynamo_version: str = None, path: str = None) -> bool:
@@ -709,10 +762,12 @@ def mark_pattern_verified(name: str, dynamo_version: str = None, path: str = Non
 
 def save_pattern(name: str, instructions: dict, description: str = "", keywords: List[str] = None,
                  gotchas: List[str] = None, problems: Optional[List[str]] = None, dynamo_version: str = None,
-                 overwrite: bool = False, path: str = None, status: str = None) -> dict:
+                 overwrite: bool = False, path: str = None, status: str = None,
+                 packages: List[dict] = None) -> dict:
     """
     把一組已建好的 nodes/connectors 存成模式。problems=None 表示未對照工作區（status unverified），
     [] 表示已在工作區確認全部節點與連線存在（status verified）。status 可覆寫（例：captured）。
+    packages: 模式用到的外掛套件 [{name, version, nodes}]，放置時會自動加上提醒群組。
     """
     nodes_in = instructions.get("nodes") or []
     if not name or not nodes_in:
@@ -740,6 +795,7 @@ def save_pattern(name: str, instructions: dict, description: str = "", keywords:
         "nodes": nodes,
         "connectors": connectors,
         "gotchas": list(gotchas or []),
+        "packages": list(packages or []),
         "status": status or ("verified" if problems == [] else "unverified"),
         "verified": f"{dynamo_version or 'unknown'} ({now})" if problems == [] and not status else None,
     }

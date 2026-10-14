@@ -150,6 +150,15 @@ async def main(args):
             await bridge.call("execute_dynamo_instructions", instructions=json.dumps(inst),
                               allow_fallback=False, clientId="registry-verify")
             status = await bridge.call("get_graph_status")
+            for _ in range(5):  # 大工作區偶爾回傳非 JSON（逾時/忙碌），稍等重試
+                if isinstance(status, dict):
+                    break
+                await asyncio.sleep(3)
+                status = await bridge.call("get_graph_status")
+            if not isinstance(status, dict):
+                results.append({"name": name, "pattern": True, "result": "FAIL",
+                                "reason": f"無法讀取工作區狀態: {str(status)[:200]}"})
+                continue
             problems = node_registry.check_pattern_in_graph(inst, status.get("nodes"), status.get("connectors"))
             if not problems:
                 # captured / unverified 模式實機建立成功 -> 升級為 verified

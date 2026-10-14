@@ -1359,7 +1359,7 @@ class MCPBridgeServer:
                     "properties": {
                         "instructions": {
                             "type": "string",
-                            "description": "JSON 格式的完整圖形定義。必須包含 'nodes' 和 'connectors'。Python 節點需指定 'pythonCode' 欄位。"
+                            "description": "JSON 格式的完整圖形定義。必須包含 'nodes' 和 'connectors'。Python 節點需指定 'pythonCode' 欄位。可選 'groups': [{title, description, color, nodeIds}]，放置後自動建立群組（get_node_pattern 對需要外掛的模式會自動帶入提醒群組，請原樣傳入）。"
                         },
                         "dryRun": {
                             "type": "boolean",
@@ -2058,6 +2058,25 @@ async def _learn_node_registry(session_id: str, sent_nodes: list, pre_existing_i
         log(f"[NodeRegistry] auto-learn failed: {e}")
         return None
 
+async def _create_instruction_groups(session_id: str, groups: list) -> list:
+    """instructions 內的 groups：只框住實際建立成功的節點（外掛未安裝時仍保留提醒）。"""
+    report = []
+    status = await _safe_send(session_id, {"action": "get_graph_status"})
+    present = {str(n.get("id", "")).lower() for n in (status or {}).get("nodes") or []}
+    for g in groups:
+        ids = [i for i in g.get("nodeIds") or [] if str(i).lower() in present]
+        if not ids:
+            report.append({"title": g.get("title"), "status": "skipped", "message": "沒有已建立的節點"})
+            continue
+        try:
+            r = await create_group(nodeIds=ids, title=g.get("title") or "Group",
+                                   description=g.get("description") or "", color=g.get("color") or "#FFC1D5E0",
+                                   sessionId=session_id)
+            report.append({"title": g.get("title"), "status": (r or {}).get("status", "ok"), "nodes": len(ids)})
+        except Exception as e:
+            report.append({"title": g.get("title"), "status": "error", "message": str(e)})
+    return report
+
 async def execute_dynamo_instructions(
     instructions: str, 
     clear_before_execute: bool = False, 
@@ -2084,6 +2103,8 @@ async def execute_dynamo_instructions(
     
     if isinstance(json_data, list):
         json_data = {"nodes": json_data, "connectors": []}
+    # 放置後要建立的群組（例：連接模式的外掛套件提醒），不送給 Dynamo
+    instruction_groups = json_data.pop("groups", None) or []
     
     if dryRun:
         report = _generate_dry_run_report(json_data, base_x, base_y)
@@ -2154,6 +2175,7 @@ async def execute_dynamo_instructions(
 
         # 首次嘗試執行
         response = await ws_manager.send_command_async(session_id, json_data)
+        groups_report = await _create_instruction_groups(session_id, instruction_groups) if instruction_groups else None
 
         registry_report = None
         if learn_enabled:
@@ -2164,6 +2186,7 @@ async def execute_dynamo_instructions(
         registry_extra = {}
         if registry_corrections: registry_extra["registryCorrections"] = registry_corrections
         if registry_report: registry_extra["registry"] = registry_report
+        if groups_report: registry_extra["groups"] = groups_report
 
         # [核心優化] 差異化重試與降級機制 (Differentiated Fallback)
         if response.get("status") == "error" and allow_fallback:
@@ -2382,7 +2405,8 @@ def get_node_pattern(query: str = "", baseX: float = 0, baseY: float = 0) -> str
         lines = ["[PATTERN] 全部連接模式（用 get_node_pattern(query=名稱) 取得可執行 JSON）:"]
         for name, pattern, _ in matches:
             desc = pattern.get("description", "") if isinstance(pattern, dict) else pattern
-            lines.append(f"- {name}: {desc}")
+            reminder = node_registry.package_reminder(pattern) if isinstance(pattern, dict) else None
+            lines.append(f"- {name}: {desc}" + (f"【{reminder}】" if reminder else ""))
         return "\n".join(lines)
     return node_registry.format_patterns(matches, float(baseX or 0), float(baseY or 0))
 
@@ -2449,13 +2473,14 @@ async def capture_node_pattern(name: str, description: str = "", keywords: list 
         or node_registry.detect_dynamo_version(status.get("processId"))
     result = node_registry.save_pattern(name, built["instructions"], description, keywords, all_gotchas,
                                         problems=None, dynamo_version=version, overwrite=overwrite,
-                                        status="captured")
+                                        status="captured", packages=built.get("packages"))
     if result.get("status") == "ok":
         result.update({
             "capturedFrom": source,
             "createSources": dict(Counter(built["sources"].values())),
             "warnings": built["warnings"],
             "externalInputs": built["externalInputs"],
+            "packages": built.get("packages") or [],
             "valueNote": dyn_note,
             "next": "在空白工作區執行 python tests/verify_node_registry_live.py 驗證，通過後狀態會改為 verified",
         })
