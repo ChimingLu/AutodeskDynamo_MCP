@@ -18,7 +18,7 @@ const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
 const WebSocket = require("ws");
-const { spawn } = require("child_process");
+const { spawn, execFile } = require("child_process");
 const path = require("path");
 
 // 配置
@@ -27,6 +27,11 @@ const RECONNECT_INTERVAL = 5000; // 5 seconds
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 const PYTHON_STARTUP_TIMEOUT = 15000; // 等待 Python server 可連線的上限
 const CONNECT_RETRY_DELAY = 500;
+const QUICK_CLOSE_MS = 2000; // 連上後這麼快就被關閉，視為異常
+const QUICK_CLOSE_LIMIT = 3; // 連續幾次異常關閉後，判定是失效的舊 server.py
+const QUICK_RECONNECT_INTERVAL = 1000;
+const TOOLS_LIST_WAIT = 15000; // tools/list 等待連線的上限
+const BRIDGE_PORT = 65296;
 
 // MCP Server 實例
 const server = new Server(
@@ -36,7 +41,7 @@ const server = new Server(
     },
     {
         capabilities: {
-            tools: {},
+            tools: { listChanged: true },
         },
     }
 );
@@ -49,6 +54,9 @@ let requestCounter = 0;
 let pythonProcess = null; // Python server 子程序
 let reconnectTimer = null;
 let shuttingDown = false;
+let quickCloses = 0;
+let toolsListMissed = false; // 曾因未連線回傳空工具清單，連上後通知客戶端重新取得
+let connectWaiters = [];
 
 /**
  * 連接至 Python WebSocket Manager
@@ -59,13 +67,16 @@ function connectToPython() {
 
         const ws = new WebSocket(PYTHON_WS_URL);
         let opened = false;
+        let openedAt = 0;
         wsClient = ws;
 
         ws.on("open", () => {
             console.error("[MCP Bridge] ✅ Connected to Python WebSocket Manager");
             opened = true;
+            openedAt = Date.now();
             isConnected = true;
             resolve();
+            onConnected();
         });
 
         ws.on("message", (data) => {
@@ -103,8 +114,70 @@ function connectToPython() {
             }
             pendingRequests.clear();
 
+            if (Date.now() - openedAt < QUICK_CLOSE_MS) {
+                quickCloses++;
+            } else {
+                quickCloses = 0;
+            }
             scheduleReconnect();
         });
+    });
+}
+
+function onConnected() {
+    const waiters = connectWaiters;
+    connectWaiters = [];
+    waiters.forEach(resolve => resolve(true));
+
+    // 連線穩定一段時間後才重置異常計數，並在需要時通知客戶端工具清單已就緒
+    setTimeout(() => {
+        if (!isConnected) return;
+        quickCloses = 0;
+        if (toolsListMissed) {
+            toolsListMissed = false;
+            server.sendToolListChanged().catch(() => {});
+        }
+    }, QUICK_CLOSE_MS);
+}
+
+/**
+ * 等待連線建立（最多 timeoutMs）
+ */
+function waitForConnection(timeoutMs) {
+    if (isConnected) return Promise.resolve(true);
+    return new Promise(resolve => {
+        const done = (ok) => {
+            clearTimeout(timer);
+            connectWaiters = connectWaiters.filter(w => w !== done);
+            resolve(ok);
+        };
+        const timer = setTimeout(() => done(false), timeoutMs);
+        connectWaiters.push(done);
+    });
+}
+
+/**
+ * 找出佔用 BRIDGE_PORT 且命令列含 server.py 的程序並結束它。
+ * 用於舊版 server.py 失效（例如更新前遺留的程序）卻仍佔著埠口的情況。
+ */
+function killStaleServer() {
+    return new Promise(resolve => {
+        if (process.platform === "win32") {
+            const script =
+                `$c = Get-NetTCPConnection -LocalPort ${BRIDGE_PORT} -State Listen -ErrorAction SilentlyContinue; ` +
+                `foreach ($x in $c) { ` +
+                `$p = Get-CimInstance Win32_Process -Filter "ProcessId=$($x.OwningProcess)"; ` +
+                `if ($p -and $p.CommandLine -match 'server\\.py') { Stop-Process -Id $p.ProcessId -Force; Write-Output $p.ProcessId } }`;
+            execFile("powershell", ["-NoProfile", "-NonInteractive", "-Command", script],
+                { windowsHide: true, timeout: 15000 },
+                (error, stdout) => resolve(error ? "" : stdout.trim()));
+        } else {
+            execFile("sh", ["-c",
+                `for p in $(lsof -t -iTCP:${BRIDGE_PORT} -sTCP:LISTEN 2>/dev/null); do ` +
+                `ps -o args= -p $p | grep -q 'server\\.py' && kill $p && echo $p; done`],
+                { timeout: 15000 },
+                (error, stdout) => resolve(error ? "" : stdout.trim()));
+        }
     });
 }
 
@@ -113,14 +186,24 @@ function connectToPython() {
  */
 function scheduleReconnect() {
     if (shuttingDown || reconnectTimer) return;
-    reconnectTimer = setTimeout(() => {
+    const delay = quickCloses > 0 ? QUICK_RECONNECT_INTERVAL : RECONNECT_INTERVAL;
+    reconnectTimer = setTimeout(async () => {
+        if (quickCloses >= QUICK_CLOSE_LIMIT) {
+            console.error("[MCP Bridge] ⚠️  Python server keeps dropping connections; restarting stale server.py...");
+            const killed = await killStaleServer();
+            console.error(killed
+                ? `[MCP Bridge] Stopped stale server.py (PID: ${killed.split(/\s+/).join(", ")})`
+                : "[MCP Bridge] ❌ Could not stop the process on port 65296; please end the old python.exe (server.py) manually");
+            quickCloses = 0;
+            await new Promise(resolve => setTimeout(resolve, CONNECT_RETRY_DELAY));
+        }
         reconnectTimer = null;
         console.error("[MCP Bridge] Attempting to reconnect...");
         ensurePythonConnection().catch(err => {
             console.error("[MCP Bridge] Reconnection failed:", err.message);
             scheduleReconnect();
         });
-    }, RECONNECT_INTERVAL);
+    }, delay);
 }
 
 /**
@@ -159,11 +242,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     console.error("[MCP Bridge] 🔧 Received tools/list request");
 
     try {
-        const toolsList = await sendToPython("tools/list", {});
+        // 連線可能剛好在重建中（例如正在換掉失效的舊 server.py），期限內持續重試
+        const deadline = Date.now() + TOOLS_LIST_WAIT;
+        let toolsList;
+        for (;;) {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0 || !(await waitForConnection(remaining))) {
+                throw new Error("Not connected to Python WebSocket Manager");
+            }
+            try {
+                toolsList = await sendToPython("tools/list", {});
+                break;
+            } catch (error) {
+                const retryable = error.message === "Connection closed" ||
+                    error.message === "Not connected to Python WebSocket Manager";
+                if (!retryable || Date.now() >= deadline) throw error;
+                await new Promise(resolve => setTimeout(resolve, CONNECT_RETRY_DELAY));
+            }
+        }
         console.error(`[MCP Bridge] Registered ${toolsList.length || 0} tools`);
         return { tools: toolsList || [] };
     } catch (error) {
         console.error(`[MCP Bridge] ❌ Failed to list tools: ${error.message}`);
+        toolsListMissed = true;
         return { tools: [] };
     }
 });
