@@ -152,6 +152,7 @@ Antigravity 用戶可安裝 Skill 以獲得自動觸發功能：
 
 - `.skills/dynamo-automation`：建立/修改/連線 Dynamo 節點
 - `.skills/dynamo-script-analysis`：分析當前腳本邏輯並生成 Mermaid 流程圖
+- `.skills/dynamo-connection-patterns`：建圖前查連接模式、存下好用的模式、從既有 .dyn 擷取並去識別化
 
 **符號連結方式**（推薦開發者）：
 ```powershell
