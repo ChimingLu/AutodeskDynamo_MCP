@@ -20,13 +20,13 @@ const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontext
 const WebSocket = require("ws");
 const { spawn } = require("child_process");
 const path = require("path");
-const net = require("net");
 
 // 配置
 const PYTHON_WS_URL = "ws://127.0.0.1:65296"; // MCP Bridge port
 const RECONNECT_INTERVAL = 5000; // 5 seconds
 const REQUEST_TIMEOUT = 30000; // 30 seconds
-const PYTHON_STARTUP_TIMEOUT = 5000; // 5 seconds to wait for Python server
+const PYTHON_STARTUP_TIMEOUT = 15000; // 等待 Python server 可連線的上限
+const CONNECT_RETRY_DELAY = 500;
 
 // MCP Server 實例
 const server = new Server(
@@ -47,6 +47,8 @@ let isConnected = false;
 let pendingRequests = new Map(); // { requestId: { resolve, reject, timer } }
 let requestCounter = 0;
 let pythonProcess = null; // Python server 子程序
+let reconnectTimer = null;
+let shuttingDown = false;
 
 /**
  * 連接至 Python WebSocket Manager
@@ -55,15 +57,18 @@ function connectToPython() {
     return new Promise((resolve, reject) => {
         console.error(`[MCP Bridge] Connecting to Python WebSocket Manager at ${PYTHON_WS_URL}...`);
 
-        wsClient = new WebSocket(PYTHON_WS_URL);
+        const ws = new WebSocket(PYTHON_WS_URL);
+        let opened = false;
+        wsClient = ws;
 
-        wsClient.on("open", () => {
+        ws.on("open", () => {
             console.error("[MCP Bridge] ✅ Connected to Python WebSocket Manager");
+            opened = true;
             isConnected = true;
             resolve();
         });
 
-        wsClient.on("message", (data) => {
+        ws.on("message", (data) => {
             try {
                 const response = JSON.parse(data.toString());
                 console.error(`[MCP Bridge] ← Received from Python:`, JSON.stringify(response).substring(0, 200));
@@ -80,13 +85,14 @@ function connectToPython() {
             }
         });
 
-        wsClient.on("error", (error) => {
+        ws.on("error", (error) => {
             console.error(`[MCP Bridge] ❌ WebSocket error: ${error.message}`);
-            isConnected = false;
             reject(error);
         });
 
-        wsClient.on("close", () => {
+        ws.on("close", () => {
+            // 尚未連上就失敗的嘗試由呼叫端重試
+            if (!opened) return;
             console.error("[MCP Bridge] ⚠️  Connection to Python closed");
             isConnected = false;
 
@@ -97,15 +103,24 @@ function connectToPython() {
             }
             pendingRequests.clear();
 
-            // 自動重連
-            setTimeout(() => {
-                console.error("[MCP Bridge] Attempting to reconnect...");
-                connectToPython().catch(err => {
-                    console.error("[MCP Bridge] Reconnection failed:", err.message);
-                });
-            }, RECONNECT_INTERVAL);
+            scheduleReconnect();
         });
     });
+}
+
+/**
+ * 自動重連；Python server 不在了就重新啟動它
+ */
+function scheduleReconnect() {
+    if (shuttingDown || reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        console.error("[MCP Bridge] Attempting to reconnect...");
+        ensurePythonConnection().catch(err => {
+            console.error("[MCP Bridge] Reconnection failed:", err.message);
+            scheduleReconnect();
+        });
+    }, RECONNECT_INTERVAL);
 }
 
 /**
@@ -195,69 +210,75 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
- * 檢查埠口是否可用
+ * 在期限內反覆嘗試連線
  */
-function isPortAvailable(port) {
-    return new Promise((resolve) => {
-        const server = net.createServer();
-        server.once('error', () => resolve(false));
-        server.once('listening', () => {
-            server.close();
-            resolve(true);
-        });
-        server.listen(port, '127.0.0.1');
-    });
+async function connectWithRetry(timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        try {
+            return await connectToPython();
+        } catch (error) {
+            if (Date.now() >= deadline) throw error;
+            await new Promise(resolve => setTimeout(resolve, CONNECT_RETRY_DELAY));
+        }
+    }
 }
 
 /**
- * 啟動 Python Server
+ * 啟動 Python Server（launcher.py）
+ *
+ * 多個 AI 客戶端可能同時啟動本橋接；它們共用同一個 server.py。
+ * 若兩邊同時啟動，輸的那個 server.py 會因埠口已被佔用而結束，
+ * 之後的連線重試會接上贏的那個。
  */
-async function startPythonServer() {
-    console.error("[MCP Bridge] Checking Python server status...");
-    
-    // 檢查埠口是否已被佔用
-    const portAvailable = await isPortAvailable(65296);
-    
-    if (!portAvailable) {
-        console.error("[MCP Bridge] ✅ Port 65296 already in use, assuming server.py is running");
-        return true;
-    }
-    
-    console.error("[MCP Bridge] Port 65296 is available, starting Python server...");
-    
-    // 啟動 Python server
+function spawnPythonServer() {
+    if (pythonProcess) return;
+
+    console.error("[MCP Bridge] Starting Python server...");
     const launcherPath = path.join(__dirname, '..', 'launcher.py');
-    
+
     pythonProcess = spawn('python', [launcherPath], {
         cwd: path.join(__dirname, '..', '..'),
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true
     });
-    
+
     // 將 Python 輸出重定向到 stderr
     pythonProcess.stdout.on('data', (data) => {
         console.error(`[Python] ${data.toString().trim()}`);
     });
-    
+
     pythonProcess.stderr.on('data', (data) => {
         console.error(`[Python] ${data.toString().trim()}`);
     });
-    
+
     pythonProcess.on('error', (error) => {
         console.error(`[MCP Bridge] ❌ Failed to start Python server: ${error.message}`);
     });
-    
+
     pythonProcess.on('exit', (code) => {
         console.error(`[MCP Bridge] Python server exited with code ${code}`);
         pythonProcess = null;
     });
-    
+
     console.error(`[MCP Bridge] ✅ Python server started (PID: ${pythonProcess.pid})`);
-    
-    // 等待 Python server 啟動
+}
+
+/**
+ * 連上 Python WebSocket Manager；連不上就啟動它再重試
+ */
+async function ensurePythonConnection() {
+    console.error("[MCP Bridge] Checking Python server status...");
+    try {
+        await connectToPython();
+        return;
+    } catch (error) {
+        console.error("[MCP Bridge] Python server not reachable, starting it...");
+    }
+
+    spawnPythonServer();
     console.error("[MCP Bridge] Waiting for Python server to be ready...");
-    await new Promise(resolve => setTimeout(resolve, PYTHON_STARTUP_TIMEOUT));
-    
-    return true;
+    await connectWithRetry(PYTHON_STARTUP_TIMEOUT);
 }
 
 /**
@@ -270,11 +291,8 @@ async function main() {
     console.error("");
 
     try {
-        // 啟動 Python Server
-        await startPythonServer();
-        
-        // 連接至 Python WebSocket Manager
-        await connectToPython();
+        // 連接至 Python WebSocket Manager（必要時啟動它）
+        await ensurePythonConnection();
 
         // 啟動 Stdio MCP Server
         const transport = new StdioServerTransport();
@@ -296,6 +314,7 @@ process.on("unhandledRejection", (error) => {
 
 process.on("SIGINT", () => {
     console.error("\n[MCP Bridge] Shutting down gracefully...");
+    shuttingDown = true;
     if (wsClient) {
         wsClient.close();
     }
