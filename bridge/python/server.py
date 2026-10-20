@@ -26,7 +26,13 @@ from collections import Counter
 import node_registry
 
 # 全域日誌函數
-def log(m): print(m, file=sys.stderr)
+def log(m):
+    # 由 Node 橋接啟動時 stderr 是接到它的管線；該橋接結束後管線斷掉，
+    # 若讓 print 拋錯，每個新連線都會在第一行 log 就被關閉。
+    try:
+        print(m, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
 
 # ==========================================
 # 多客戶端衝突協調層 (Conflict Coordination Layer)
